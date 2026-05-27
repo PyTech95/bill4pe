@@ -23,6 +23,14 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-27 (Post-MVP iteration)
+- **Prominent AI "Snap your thali photo" hero card** on SubCategory page (Hindi user request).
+  - Lime "AI Magic" badge + large camera icon + royal-blue Capture CTA.
+  - Dynamically labels with selected service (e.g., "Snap your breakfast photo").
+  - One-tap opens device camera → uploads to `/api/ai/detect-items?category=food` → Gemini 3 Flash returns Indian dish names (Dal, Roti, Sabji, Rice, Paneer etc.) with realistic INR prices.
+  - Verified end-to-end with real thali image: detected 8 items in <3s.
+- Fixed runtime bugs in SubCategory.jsx: missing `RefreshCw` import, missing `captureLocation` function, missing `geo.status` field — page no longer crashes when GPS fails.
+
 ## What's Been Implemented — 2026-05-27 (MVP v1)
 - JWT email/password auth with ₹50 welcome bonus.
 - Splash + 10 service categories with sub-categories and icons.

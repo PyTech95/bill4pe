@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   QrCode, MapPin, Plus, Trash2, ArrowRight, Camera, ScanLine, Loader2, Building2,
-  Phone, ChevronDown, Sparkles, X,
+  Phone, ChevronDown, Sparkles, X, RefreshCw,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ export default function SubCategory() {
   const [serviceType, setServiceType] = useState(c?.sub?.[0] || '');
   const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '' });
   const [items, setItems] = useState([emptyItem()]);
-  const [geo, setGeo] = useState({ lat: null, lng: null });
+  const [geo, setGeo] = useState({ lat: null, lng: null, status: 'idle' });
   const [scanOpen, setScanOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiScanning, setAiScanning] = useState(false);
@@ -47,13 +47,27 @@ export default function SubCategory() {
   const fileRef = useRef(null);
   const scannerRef = useRef(null);
 
-  // Auto-capture location
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  // Capture geolocation (callable + auto on mount)
+  const captureLocation = () => {
+    if (!navigator.geolocation) {
+      setGeo({ lat: null, lng: null, status: 'unsupported' });
+      return;
+    }
+    setGeo((g) => ({ ...g, status: 'loading' }));
     navigator.geolocation.getCurrentPosition(
-      (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => { /* user declined */ }
+      (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude, status: 'ok' }),
+      (err) => {
+        const denied = err && err.code === 1;
+        setGeo({ lat: null, lng: null, status: denied ? 'denied' : 'error' });
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
+  };
+
+  // Auto-capture location on first render
+  useEffect(() => {
+    captureLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // QR scanner lifecycle
@@ -148,6 +162,7 @@ export default function SubCategory() {
         merchant_upi: merchant.upi.trim(),
         merchant_mobile: merchant.mobile.trim(),
       },
+      prefill_geo: geo.status === 'ok' ? { lat: geo.lat, lng: geo.lng } : null,
     }));
     nav('/app/pay');
   };
@@ -380,20 +395,60 @@ export default function SubCategory() {
       </div>
 
       {/* Location */}
-      <div className="flat-card p-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-[#0A1128]/5 text-navy grid place-items-center">
+      <div className={`flat-card p-4 flex items-center gap-3 ${geo.status === 'denied' ? 'border-red-200 bg-red-50' : geo.status === 'ok' ? 'border-emerald-200' : ''}`}>
+        <div className={`w-9 h-9 rounded-lg grid place-items-center shrink-0 ${
+          geo.status === 'ok' ? 'bg-emerald-500/10 text-emerald-600' :
+          geo.status === 'denied' ? 'bg-red-500/10 text-red-500' :
+          'bg-[#0A1128]/5 text-navy'
+        }`}>
           <MapPin className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Location</div>
-          {geo.lat ? (
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+            GPS Location
+          </div>
+          {geo.status === 'ok' && geo.lat ? (
             <div className="font-mono text-xs text-navy mt-0.5">
-              {geo.lat.toFixed(4)}, {geo.lng.toFixed(4)} <span className="text-emerald-600">· auto-captured</span>
+              {geo.lat.toFixed(5)}, {geo.lng.toFixed(5)}{' '}
+              <span className="text-emerald-600 font-semibold">· captured</span>
+            </div>
+          ) : geo.status === 'loading' ? (
+            <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Getting your location...
+            </div>
+          ) : geo.status === 'denied' ? (
+            <div className="text-xs text-red-600 mt-0.5">
+              Permission denied. Enable in browser settings.
+            </div>
+          ) : geo.status === 'unsupported' ? (
+            <div className="text-xs text-slate-500 mt-0.5">
+              Your browser doesn't support location.
             </div>
           ) : (
-            <div className="text-xs text-slate-500 mt-0.5">Allow location to attach to bill</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              Tap to attach location to bill
+            </div>
           )}
         </div>
+        {(geo.status === 'denied' || geo.status === 'error' || geo.status === 'idle') && (
+          <button
+            onClick={captureLocation}
+            data-testid="enable-gps-btn"
+            className="press-down h-9 px-3 rounded-full bg-brand text-white text-xs font-semibold hover:bg-[#1858CC]"
+          >
+            Enable GPS
+          </button>
+        )}
+        {geo.status === 'ok' && (
+          <button
+            onClick={captureLocation}
+            data-testid="refresh-gps-btn"
+            className="press-down h-9 w-9 grid place-items-center rounded-full border border-soft hover:border-navy"
+            title="Refresh location"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+          </button>
+        )}
       </div>
 
       {/* Sticky pay-now bar */}
