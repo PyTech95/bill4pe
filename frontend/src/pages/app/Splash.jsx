@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Wallet as WalletIcon, ArrowRight, TrendingUp, Sparkles,
-  ChevronRight, Camera, Plane, RotateCcw, FileBarChart,
+  Wallet as WalletIcon, TrendingUp, Sparkles,
+  ChevronRight, Plane, RotateCcw, FileBarChart,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, catByKey } from '@/lib/categories';
@@ -53,7 +53,7 @@ export default function Splash() {
   }, []);
 
   const food = useMemo(() => catByKey('food'), []);
-  const otherCats = useMemo(() => CATEGORIES.filter((c) => c.key !== 'food'), []);
+  const allCats = useMemo(() => CATEGORIES, []);
   const firstName = user?.name?.split(' ')[0] || 'there';
 
   const quickPay = (m) => {
@@ -212,52 +212,13 @@ export default function Splash() {
         </div>
       </div>
 
-      {/* ------- Featured Food card (full width) ------- */}
-      <motion.button
-        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.12 }}
-        onClick={() => nav(`/app/category/${food.key}`)}
-        data-testid={`category-${food.key}-card`}
-        whileHover={{ y: -2 }}
-        className="press-down relative w-full overflow-hidden rounded-3xl bg-navy text-white p-5 text-left group"
-      >
-        {/* halo */}
-        <div
-          className="absolute inset-0 opacity-60 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 85% 30%, rgba(31,111,235,0.35), transparent 50%)',
-          }}
-        />
-        {/* decorative camera icon */}
-        <Camera className="absolute -right-6 -bottom-6 w-44 h-44 text-white/[0.04]" strokeWidth={1} />
-
-        <div className="relative flex items-start gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-brand text-white grid place-items-center shrink-0 shadow-lg shadow-brand/30">
-            <food.icon className="w-7 h-7" strokeWidth={1.8} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.25em] text-brand/90 font-bold">
-              Most popular
-            </div>
-            <div className="font-display text-2xl font-bold mt-1 leading-tight">
-              Snap a food bill
-            </div>
-            <div className="text-xs text-white/60 mt-1.5">
-              {food.sub.join(' · ')}
-            </div>
-          </div>
-          <ArrowRight className="w-5 h-5 text-brand mt-2 transition-transform group-hover:translate-x-1" />
-        </div>
-      </motion.button>
-
-      {/* ------- Other categories grid ------- */}
+      {/* ------- All categories grid (equal weight) ------- */}
       <motion.div
         initial="hidden" animate="show"
-        variants={{ show: { transition: { staggerChildren: 0.03, delayChildren: 0.15 } } }}
+        variants={{ show: { transition: { staggerChildren: 0.025, delayChildren: 0.12 } } }}
         className="grid grid-cols-2 gap-3"
       >
-        {otherCats.map(({ key, label, icon: Icon, sub }) => (
+        {allCats.map(({ key, label, icon: Icon, sub }) => (
           <motion.button
             key={key}
             variants={{
