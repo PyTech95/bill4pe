@@ -122,5 +122,8 @@ body {
 /* Selection */
 ::selection { background: var(--brand); color: var(--white); }
 
+/* Hide Emergent platform badge */
+#emergent-badge { display: none !important; }
+
 /* Custom cursor on landing CTA areas */
 .cta-cursor { cursor: pointer; }
