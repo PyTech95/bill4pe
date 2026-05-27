@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, catByKey } from '@/lib/categories';
 import api from '@/lib/api';
+import { VoiceExpense } from '@/components/VoiceExpense';
 
 const greet = () => {
   const h = new Date().getHours();
@@ -130,6 +131,9 @@ export default function Splash() {
           </div>
         </div>
       </motion.div>
+
+      {/* ------- Voice expense entry (AI Whisper) ------- */}
+      <VoiceExpense />
 
       {/* ------- Quick action chips ------- */}
       <motion.div

@@ -27,6 +27,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+from emergentintegrations.llm.openai import OpenAISpeechToText
 
 
 ROOT_DIR = Path(__file__).parent
@@ -531,6 +532,145 @@ async def suggest_items(payload: dict, user=Depends(get_current_user)):
         return {"suggestions": [str(x) for x in arr if isinstance(x, (str, int, float))][:5]}
     except Exception:
         return {"suggestions": []}
+
+
+# =================== Voice Expense Entry (Whisper STT + Gemini parse) ===================
+VOICE_PARSE_PROMPT = """You are an expert expense parser for an Indian reimbursement app. The user spoke a short voice note (Hindi, English, or mixed Hinglish).
+
+Extract these fields and return STRICT JSON ONLY (no markdown, no prose, no code fences):
+{
+  "category": one of ["food","travel","hotel","stationery","gift","pantry","flower","grocery","cleaning","other"],
+  "sub_category": one short string fitting the category (e.g. "Lunch","Dinner","Cab","Flight","Lodging","Office","Client","Tea/Coffee","Bouquet","Daily","Housekeeping","Misc"),
+  "merchant_name": short string or "" if not mentioned,
+  "total_amount": number (INR) if a total is mentioned, else 0,
+  "items": array of {"name": str, "quantity": int, "unit_price": float} — derive items from the speech. If only a total is mentioned (e.g. "spent 250 on lunch"), create one item with name=sub_category, quantity=1, unit_price=total.
+}
+
+Examples:
+"Spent 250 on lunch at Saravana Bhavan"
+=> {"category":"food","sub_category":"Lunch","merchant_name":"Saravana Bhavan","total_amount":250,"items":[{"name":"Lunch","quantity":1,"unit_price":250}]}
+
+"Cab to airport 450 rupees Uber"
+=> {"category":"travel","sub_category":"Cab","merchant_name":"Uber","total_amount":450,"items":[{"name":"Cab fare","quantity":1,"unit_price":450}]}
+
+"कल 600 का dinner किया, 3 roti, dal aur paneer"
+=> {"category":"food","sub_category":"Dinner","merchant_name":"","total_amount":600,"items":[{"name":"Roti","quantity":3,"unit_price":15},{"name":"Dal","quantity":1,"unit_price":55},{"name":"Paneer","quantity":1,"unit_price":500}]}
+
+"Office stationery 1200 staples और pen"
+=> {"category":"stationery","sub_category":"Office","merchant_name":"","total_amount":1200,"items":[{"name":"Office supplies","quantity":1,"unit_price":1200}]}
+
+If unclear, fall back to category="other", sub_category="Misc". Always return valid JSON."""
+
+
+@api.post("/voice/expense")
+async def voice_expense(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Accept audio file → Whisper transcript → Gemini parse → structured draft expense."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "AI key not configured")
+    raw = await file.read()
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Audio too large (max 25MB)")
+    if not raw:
+        raise HTTPException(400, "Empty audio file")
+
+    # Pick suffix based on content_type for Whisper
+    ct = (file.content_type or "").lower()
+    if "webm" in ct:
+        suffix = ".webm"
+    elif "mp4" in ct or "m4a" in ct:
+        suffix = ".m4a"
+    elif "wav" in ct:
+        suffix = ".wav"
+    elif "mpeg" in ct or "mp3" in ct:
+        suffix = ".mp3"
+    else:
+        suffix = ".webm"  # MediaRecorder default in browsers
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(raw); tmp.flush(); tmp.close()
+    transcript = ""
+    try:
+        # Step 1: Whisper transcription
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        with open(tmp.name, "rb") as af:
+            stt_resp = await stt.transcribe(
+                file=af,
+                model="whisper-1",
+                response_format="json",
+                prompt="Indian expense note. Mentions amounts in rupees, food items, cab/flight, merchant names.",
+            )
+        transcript = (getattr(stt_resp, "text", "") or "").strip()
+        if not transcript:
+            raise HTTPException(422, "Could not hear anything in the audio")
+
+        # Step 2: Parse to structured JSON via Gemini
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"voice-parse-{uuid.uuid4()}",
+            system_message=VOICE_PARSE_PROMPT,
+        ).with_model("gemini", "gemini-3-flash-preview")
+        reply = await chat.send_message(UserMessage(text=f"Transcript: {transcript}"))
+        txt = (reply or "").strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`")
+            if txt.lower().startswith("json"):
+                txt = txt[4:].strip()
+        start, end = txt.find("{"), txt.rfind("}")
+        if start >= 0 and end > start:
+            txt = txt[start:end + 1]
+        try:
+            parsed = json.loads(txt)
+        except Exception:
+            parsed = {}
+
+        # Normalize
+        valid_cats = {"food", "travel", "hotel", "stationery", "gift", "pantry", "flower", "grocery", "cleaning", "other"}
+        category = str(parsed.get("category", "other")).lower().strip()
+        if category not in valid_cats:
+            category = "other"
+        sub_category = str(parsed.get("sub_category", "Misc")).strip() or "Misc"
+        merchant_name = str(parsed.get("merchant_name", "")).strip()
+        try:
+            total_amount = float(parsed.get("total_amount", 0) or 0)
+        except Exception:
+            total_amount = 0.0
+
+        items = []
+        for it in (parsed.get("items") or []):
+            if not isinstance(it, dict):
+                continue
+            name = str(it.get("name", "")).strip()
+            if not name:
+                continue
+            try:
+                qty = float(it.get("quantity", 1) or 1)
+                price = float(it.get("unit_price", 0) or 0)
+            except Exception:
+                qty, price = 1.0, 0.0
+            items.append({"name": name, "quantity": qty, "unit_price": round(price, 2)})
+
+        # Fallback: if no items but we have a total
+        if not items and total_amount > 0:
+            items = [{"name": sub_category or "Expense", "quantity": 1.0, "unit_price": round(total_amount, 2)}]
+
+        return {
+            "transcript": transcript,
+            "category": category,
+            "sub_category": sub_category,
+            "merchant_name": merchant_name,
+            "total_amount": round(total_amount, 2),
+            "items": items,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Voice parse failed")
+        raise HTTPException(500, f"Voice processing failed: {str(e)[:200]}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
 
 
 # =================== Expenses ===================

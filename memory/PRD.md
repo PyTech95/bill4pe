@@ -24,12 +24,18 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 ## What's Been Implemented — 2026-05-27 (Post-MVP iteration)
+- **Voice expense entry (Whisper + Gemini)**: Big "Speak to log expense" hero card on home page.
+  - 30-second MediaRecorder capture → uploads to `POST /api/voice/expense`
+  - Backend: OpenAI Whisper (`whisper-1`) transcribes (Hindi/English/Hinglish), Gemini 3 Flash parses transcript to structured JSON
+  - Returns `{transcript, category, sub_category, merchant_name, total_amount, items[]}`
+  - Auto-fills `bill4pe_draft` in sessionStorage → navigates to `/app/editor` for review → Pay Now
+  - Verified backend with real audio (JFK MP3): Whisper transcribed perfectly, Gemini correctly fell back to other/Misc when audio isn't an expense note
+  - Frontend: Recording overlay shows red pulse mic + timer (0:00/0:30), Stop & Process button, processing overlay shows transcript + Loader
+  - Permission-denied gracefully toasts "Microphone permission denied"
 - **Prominent AI "Snap your thali photo" hero card** on SubCategory page (Hindi user request).
   - Lime "AI Magic" badge + large camera icon + royal-blue Capture CTA.
-  - Dynamically labels with selected service (e.g., "Snap your breakfast photo").
-  - One-tap opens device camera → uploads to `/api/ai/detect-items?category=food` → Gemini 3 Flash returns Indian dish names (Dal, Roti, Sabji, Rice, Paneer etc.) with realistic INR prices.
   - Verified end-to-end with real thali image: detected 8 items in <3s.
-- Fixed runtime bugs in SubCategory.jsx: missing `RefreshCw` import, missing `captureLocation` function, missing `geo.status` field — page no longer crashes when GPS fails.
+- Fixed runtime bugs in SubCategory.jsx: missing `RefreshCw` import, undefined `captureLocation` function, missing `geo.status` field.
 
 ## What's Been Implemented — 2026-05-27 (MVP v1)
 - JWT email/password auth with ₹50 welcome bonus.
