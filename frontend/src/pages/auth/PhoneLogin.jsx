@@ -56,7 +56,7 @@ export default function PhoneLogin() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/"><Logo theme="dark" size={48} /></Link>
+        <Link to="/" className="bg-white inline-flex px-3 py-2 rounded-xl self-start"><Logo theme="light" size={32} /></Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Sign in with your phone.</div>
           <p className="text-white/60 mt-4 max-w-sm">Fastest way in. Demo OTP is <span className="text-lime font-mono">123456</span>.</p>

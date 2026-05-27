@@ -356,12 +356,12 @@ const Footer = () => (
   <footer className="bg-black text-white px-5 md:px-10 lg:px-20 py-16">
     <div className="grid md:grid-cols-12 gap-10">
       <div className="md:col-span-7">
-        <div className="font-display font-bold text-5xl sm:text-7xl tracking-tighter">
-          billforpay<span className="text-lime">.</span>com
+        <div className="bg-white inline-flex p-4 rounded-2xl">
+          <img src="/logo.png" alt="Bill4Pe" className="h-16 w-auto" />
         </div>
-        <p className="mt-5 text-white/50 max-w-md">
+        <p className="mt-6 text-white/50 max-w-md">
           Pay Your Bill — AI Powered Expense & Invoice Platform.
-          Made for India's professionals.
+          Made for India's professionals. <span className="text-lime">billforpay.com</span>
         </p>
       </div>
       <div className="md:col-span-2">
@@ -393,8 +393,8 @@ export default function Landing() {
     <div className="min-h-screen bg-white">
       <nav className="absolute top-0 left-0 right-0 z-40">
         <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
-          <Link to="/" data-testid="nav-logo">
-            <img src="/logo.png" alt="Bill4Pe" className="h-9 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+          <Link to="/" data-testid="nav-logo" className="bg-white/95 px-2 py-1 rounded-lg">
+            <img src="/logo.png" alt="Bill4Pe" className="h-7 w-auto" />
           </Link>
           <div className="flex items-center gap-2">
             <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
