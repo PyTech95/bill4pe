@@ -30,7 +30,7 @@ export default function Trips() {
           <p className="text-sm text-slate-500 mt-1">Add a Travel expense to start a trip.</p>
           <button
             onClick={() => nav('/app/category/travel')}
-            className="press-down mt-5 inline-flex items-center gap-1.5 bg-lime text-navy px-5 py-2.5 rounded-full font-semibold text-sm"
+            className="press-down mt-5 inline-flex items-center gap-1.5 bg-brand text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-[#1858CC]"
             data-testid="trips-empty-cta"
           >
             <Plus className="w-4 h-4" /> Log travel expense

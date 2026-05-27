@@ -45,9 +45,9 @@ export default function Wallet() {
 
       <div className="bg-navy text-white rounded-3xl p-6 relative overflow-hidden">
         <div className="absolute inset-0 opacity-20"
-             style={{ background: 'radial-gradient(circle at 90% 10%, rgba(212,255,0,0.4), transparent 50%)' }} />
+             style={{ background: 'radial-gradient(circle at 90% 10%, rgba(31,111,235,0.5), transparent 50%)' }} />
         <div className="relative">
-          <div className="flex items-center gap-2 text-lime text-[10px] uppercase tracking-[0.3em] font-bold">
+          <div className="flex items-center gap-2 text-brand text-[10px] uppercase tracking-[0.3em] font-bold">
             <WalletIcon className="w-3.5 h-3.5" /> Available balance
           </div>
           <div className="font-mono text-4xl font-bold mt-3" data-testid="wallet-balance">
@@ -56,7 +56,7 @@ export default function Wallet() {
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <button
-                className="press-down mt-6 inline-flex items-center gap-2 bg-lime text-navy px-5 py-2.5 rounded-full font-semibold text-sm"
+                className="press-down mt-6 inline-flex items-center gap-2 bg-brand text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-[#1858CC]"
                 data-testid="recharge-btn"
               >
                 <Plus className="w-4 h-4" /> Recharge
@@ -90,7 +90,7 @@ export default function Wallet() {
               </div>
               <Button
                 onClick={recharge} disabled={loading}
-                className="press-down w-full h-12 mt-5 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+                className="press-down w-full h-12 mt-5 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
                 data-testid="confirm-recharge-btn"
               >
                 {loading ? 'Processing...' : `Add ₹${amt}`}

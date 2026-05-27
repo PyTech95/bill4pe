@@ -13,7 +13,7 @@ export default function SubCategory() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-navy text-lime grid place-items-center">
+        <div className="w-12 h-12 rounded-2xl bg-navy text-brand grid place-items-center">
           <Icon className="w-6 h-6" />
         </div>
         <div>

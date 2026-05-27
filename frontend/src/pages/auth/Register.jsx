@@ -79,7 +79,7 @@ export default function Register() {
             </div>
             <Button
               type="submit" disabled={loading}
-              className="press-down w-full h-12 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+              className="press-down w-full h-12 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
               data-testid="register-submit-btn"
             >
               {loading ? 'Creating account...' : 'Create account & get ₹50'}

@@ -82,7 +82,7 @@ export default function Capture() {
             data-testid="capture-take-image-btn"
             className="press-down w-full flat-card p-5 text-left hover:border-navy flex items-center gap-4"
           >
-            <div className="w-12 h-12 rounded-xl bg-lime text-navy grid place-items-center">
+            <div className="w-12 h-12 rounded-xl bg-brand text-white grid place-items-center">
               <Camera className="w-6 h-6" />
             </div>
             <div className="flex-1">

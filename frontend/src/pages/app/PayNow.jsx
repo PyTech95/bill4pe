@@ -184,7 +184,7 @@ export default function PayNow() {
             className="press-down w-full bg-navy text-white rounded-2xl p-4 flex items-center justify-between hover:bg-[#152042]"
           >
             <span className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-lime text-navy grid place-items-center">
+              <div className="w-10 h-10 rounded-xl bg-brand text-white grid place-items-center">
                 <Smartphone className="w-5 h-5" />
               </div>
               <span>
@@ -192,7 +192,7 @@ export default function PayNow() {
                 <div className="text-xs text-white/60">Pay ₹{total.toFixed(2)} via GPay/PhonePe/Paytm</div>
               </span>
             </span>
-            <CheckCircle2 className="w-5 h-5 text-lime" />
+            <CheckCircle2 className="w-5 h-5 text-brand" />
           </button>
 
           <div className="flat-card p-5">
@@ -217,7 +217,7 @@ export default function PayNow() {
           <Button
             onClick={submit}
             disabled={stage === 'submitting'}
-            className="press-down w-full h-12 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+            className="press-down w-full h-12 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
             data-testid="confirm-payment-btn"
           >
             {stage === 'submitting' ? (

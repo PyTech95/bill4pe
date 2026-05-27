@@ -70,7 +70,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-navy text-white rounded-2xl p-5">
-          <div className="text-[10px] uppercase tracking-wider text-lime/80">Total spent</div>
+          <div className="text-[10px] uppercase tracking-wider text-brand">Total spent</div>
           <div className="font-mono text-2xl font-bold mt-1.5" data-testid="stat-total">₹ {stats.total_expenses.toFixed(2)}</div>
         </div>
         <div className="flat-card p-5">
@@ -157,7 +157,7 @@ export default function Dashboard() {
                 data-testid={`expense-row-${e.id}`}
                 className="press-down w-full flat-card p-4 flex items-center gap-3 text-left hover:border-navy"
               >
-                <div className="w-10 h-10 rounded-xl bg-navy text-lime grid place-items-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-navy text-brand grid place-items-center shrink-0">
                   <Icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">

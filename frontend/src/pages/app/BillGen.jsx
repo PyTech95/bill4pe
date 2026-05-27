@@ -114,7 +114,7 @@ export default function BillGen() {
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <Button
-              className="press-down w-full h-12 mt-6 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+              className="press-down w-full h-12 mt-6 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
               data-testid="open-generate-sheet-btn"
             >
               <FileText className="w-4 h-4 mr-2" />Generate Official Bill
@@ -156,7 +156,7 @@ export default function BillGen() {
             ) : (
               <Button
                 onClick={generate} disabled={generating}
-                className="press-down w-full h-12 mt-5 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+                className="press-down w-full h-12 mt-5 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
                 data-testid="confirm-generate-btn"
               >
                 {generating ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>)
@@ -169,9 +169,9 @@ export default function BillGen() {
 
       {expense.bill_generated && (
         <div className="mt-6 space-y-3">
-          <div className="flat-card p-5 bg-lime border-lime">
-            <div className="text-[10px] uppercase tracking-wider text-navy font-bold">Bill ID</div>
-            <div className="font-mono font-bold text-navy text-lg" data-testid="bill-id">{expense.bill_id}</div>
+          <div className="flat-card p-5 bg-brand border-brand text-white">
+            <div className="text-[10px] uppercase tracking-wider text-white/70 font-bold">Bill ID</div>
+            <div className="font-mono font-bold text-white text-lg" data-testid="bill-id">{expense.bill_id}</div>
           </div>
           <a
             href={pdfUrl()} target="_blank" rel="noopener noreferrer"

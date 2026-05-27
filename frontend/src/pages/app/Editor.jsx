@@ -147,7 +147,7 @@ export default function Editor() {
           <Button
             onClick={proceed}
             disabled={total <= 0}
-            className="press-down h-12 px-6 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+            className="press-down h-12 px-6 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
             data-testid="proceed-to-pay-btn"
           >
             Pay Now <ArrowRight className="w-4 h-4 ml-1" />

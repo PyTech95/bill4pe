@@ -68,68 +68,51 @@ export default function Splash() {
         </h1>
       </motion.div>
 
-      {/* ------- Hero wallet card with 3-stat dashboard ------- */}
+      {/* ------- Compact wallet + stats card ------- */}
       <motion.div
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
-        className="relative overflow-hidden rounded-3xl bg-navy text-white p-5"
+        className="rounded-2xl bg-white border border-soft p-4"
       >
-        {/* decorative mesh */}
-        <div
-          className="absolute inset-0 opacity-40 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 95% 5%, rgba(212,255,0,0.30) 0%, transparent 38%),' +
-              'radial-gradient(circle at 5% 95%, rgba(212,255,0,0.10) 0%, transparent 40%)',
-          }}
-        />
-        {/* tiny dot grid */}
-        <div
-          className="absolute inset-0 opacity-[0.06] pointer-events-none"
-          style={{
-            backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)',
-            backgroundSize: '14px 14px',
-          }}
-        />
-
-        <div className="relative">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.3em] text-lime/80 font-bold flex items-center gap-1.5">
-                <WalletIcon className="w-3 h-3" /> Wallet
-              </div>
-              <div className="font-mono text-3xl font-bold mt-2" data-testid="splash-wallet-balance">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#050816] text-brand grid place-items-center shrink-0">
+              <WalletIcon className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-slate-400 font-bold">Wallet</div>
+              <div className="font-mono text-lg font-bold text-navy leading-tight" data-testid="splash-wallet-balance">
                 ₹ {user?.wallet_balance?.toFixed(2) ?? '0.00'}
               </div>
             </div>
-            <button
-              onClick={() => nav('/app/wallet')}
-              data-testid="splash-recharge-btn"
-              className="press-down inline-flex items-center gap-1 bg-lime text-navy text-xs font-bold px-3 py-2 rounded-full hover:bg-[#BCE300]"
-            >
-              + Recharge
-            </button>
           </div>
+          <button
+            onClick={() => nav('/app/wallet')}
+            data-testid="splash-recharge-btn"
+            className="press-down text-xs font-semibold text-navy underline underline-offset-2 hover:text-[#152042] shrink-0"
+          >
+            + Recharge
+          </button>
+        </div>
 
-          {/* 3-stat row */}
-          <div className="mt-6 grid grid-cols-3 gap-3 pt-5 border-t border-white/10">
-            <div>
-              <div className="text-[9px] uppercase tracking-wider text-white/40 font-semibold">Today</div>
-              <div className="font-mono font-bold text-base mt-1.5" data-testid="splash-stat-today">
-                ₹{stats.today.toFixed(0)}
-              </div>
+        {/* compact 3-stat row */}
+        <div className="mt-3 grid grid-cols-3 gap-2 pt-3 border-t border-soft">
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Today</div>
+            <div className="font-mono font-semibold text-sm text-navy mt-0.5" data-testid="splash-stat-today">
+              ₹{stats.today.toFixed(0)}
             </div>
-            <div className="border-l border-white/10 pl-3">
-              <div className="text-[9px] uppercase tracking-wider text-white/40 font-semibold">All time</div>
-              <div className="font-mono font-bold text-base mt-1.5" data-testid="splash-stat-total">
-                ₹{stats.total.toFixed(0)}
-              </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">All time</div>
+            <div className="font-mono font-semibold text-sm text-navy mt-0.5" data-testid="splash-stat-total">
+              ₹{stats.total.toFixed(0)}
             </div>
-            <div className="border-l border-white/10 pl-3">
-              <div className="text-[9px] uppercase tracking-wider text-white/40 font-semibold">Bills</div>
-              <div className="font-mono font-bold text-base mt-1.5" data-testid="splash-stat-bills">
-                {stats.count}
-              </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Bills</div>
+            <div className="font-mono font-semibold text-sm text-navy mt-0.5" data-testid="splash-stat-bills">
+              {stats.count}
             </div>
           </div>
         </div>
@@ -193,21 +176,21 @@ export default function Splash() {
       >
         {/* halo */}
         <div
-          className="absolute inset-0 opacity-50 pointer-events-none"
+          className="absolute inset-0 opacity-60 pointer-events-none"
           style={{
             background:
-              'radial-gradient(circle at 85% 30%, rgba(212,255,0,0.25), transparent 45%)',
+              'radial-gradient(circle at 85% 30%, rgba(31,111,235,0.35), transparent 50%)',
           }}
         />
         {/* decorative camera icon */}
         <Camera className="absolute -right-6 -bottom-6 w-44 h-44 text-white/[0.04]" strokeWidth={1} />
 
         <div className="relative flex items-start gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-lime text-navy grid place-items-center shrink-0 shadow-lg shadow-lime/20">
+          <div className="w-14 h-14 rounded-2xl bg-brand text-white grid place-items-center shrink-0 shadow-lg shadow-brand/30">
             <food.icon className="w-7 h-7" strokeWidth={1.8} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.25em] text-lime/80 font-bold">
+            <div className="text-[10px] uppercase tracking-[0.25em] text-brand/90 font-bold">
               Most popular
             </div>
             <div className="font-display text-2xl font-bold mt-1 leading-tight">
@@ -217,7 +200,7 @@ export default function Splash() {
               {food.sub.join(' · ')}
             </div>
           </div>
-          <ArrowRight className="w-5 h-5 text-lime mt-2 transition-transform group-hover:translate-x-1" />
+          <ArrowRight className="w-5 h-5 text-brand mt-2 transition-transform group-hover:translate-x-1" />
         </div>
       </motion.button>
 
@@ -239,7 +222,7 @@ export default function Splash() {
             data-testid={`category-${key}-card`}
             className="press-down group flat-card p-3 text-left hover:border-navy transition-colors flex items-center gap-3"
           >
-            <div className="w-11 h-11 rounded-xl bg-[#0A1128] text-lime grid place-items-center shrink-0 group-hover:bg-lime group-hover:text-navy transition-colors">
+            <div className="w-11 h-11 rounded-xl bg-[#050816] text-brand grid place-items-center shrink-0 group-hover:bg-brand group-hover:text-white transition-colors">
               <Icon className="w-5 h-5" strokeWidth={1.8} />
             </div>
             <div className="flex-1 min-w-0">

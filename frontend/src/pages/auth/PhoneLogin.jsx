@@ -103,7 +103,7 @@ export default function PhoneLogin() {
                 </div>
                 <Button
                   onClick={requestOtp} disabled={loading}
-                  className="press-down w-full h-12 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+                  className="press-down w-full h-12 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
                   data-testid="otp-request-btn"
                 >
                   {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Phone className="w-4 h-4 mr-2" />}
@@ -141,7 +141,7 @@ export default function PhoneLogin() {
 
               <Button
                 onClick={verifyOtp} disabled={loading || otp.length !== 6}
-                className="press-down w-full h-12 mt-7 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+                className="press-down w-full h-12 mt-7 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
                 data-testid="otp-verify-btn"
               >
                 {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}

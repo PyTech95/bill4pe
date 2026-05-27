@@ -53,7 +53,7 @@ const Hero = () => {
               <button
                 onClick={() => nav(user ? '/app' : '/register')}
                 data-testid="hero-cta-launch"
-                className="press-down inline-flex items-center gap-2 bg-lime text-navy font-semibold px-6 py-3.5 rounded-full hover:bg-[#BCE300]"
+                className="press-down inline-flex items-center gap-2 bg-brand text-white font-semibold px-6 py-3.5 rounded-full hover:bg-[#1858CC]"
               >
                 Launch BILL4PE <ArrowRight className="w-4 h-4" />
               </button>
@@ -341,7 +341,7 @@ const Contact = () => {
           </div>
           <Button
             type="submit" disabled={sending}
-            className="press-down w-full h-12 bg-lime text-navy hover:bg-[#BCE300] rounded-full font-semibold"
+            className="press-down w-full h-12 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
             data-testid="contact-submit-btn"
           >
             <Send className="w-4 h-4 mr-2" /> {sending ? 'Sending...' : 'Send message'}
