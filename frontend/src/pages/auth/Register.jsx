@@ -28,8 +28,8 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="bg-white inline-flex px-3 py-2 rounded-xl self-start">
-          <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
+        <Link to="/" className="self-start">
+          <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Start in 30 seconds.</div>
@@ -41,7 +41,7 @@ export default function Register() {
       <div className="flex items-center justify-center p-6 bg-white text-navy">
         <form onSubmit={submit} className="w-full max-w-sm">
           <Link to="/" className="md:hidden block mb-10">
-            <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+            <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
           </Link>
           <h1 className="font-display font-bold text-3xl">Create account</h1>
           <p className="text-sm text-slate-500 mt-1">Free forever. ₹5 only per generated invoice.</p>

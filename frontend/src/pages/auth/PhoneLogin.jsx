@@ -56,7 +56,9 @@ export default function PhoneLogin() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="bg-white inline-flex px-3 py-2 rounded-xl self-start"><Logo theme="light" size={32} /></Link>
+        <Link to="/" className="self-start">
+          <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
+        </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Sign in with your phone.</div>
           <p className="text-white/60 mt-4 max-w-sm">Fastest way in. Demo OTP is <span className="text-lime font-mono">123456</span>.</p>
@@ -66,7 +68,9 @@ export default function PhoneLogin() {
 
       <div className="flex items-center justify-center p-6 bg-white text-navy">
         <div className="w-full max-w-sm">
-          <Link to="/" className="md:hidden block mb-8"><Logo size={44} /></Link>
+          <Link to="/" className="md:hidden block mb-8">
+            <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
+          </Link>
 
           {step === 'phone' && (
             <>
