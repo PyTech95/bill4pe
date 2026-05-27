@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#0A1128"/>
+  <text x="96" y="100" font-family="Outfit, Helvetica, sans-serif" font-weight="800"
+        font-size="34" fill="#D4FF00" text-anchor="middle">BILL</text>
+  <text x="96" y="138" font-family="Outfit, Helvetica, sans-serif" font-weight="800"
+        font-size="34" fill="#FFFFFF" text-anchor="middle">4PE</text>
+</svg>

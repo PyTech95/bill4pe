@@ -1,53 +1,54 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import './App.css';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import Landing from '@/pages/Landing';
+import Login from '@/pages/auth/Login';
+import Register from '@/pages/auth/Register';
+import Splash from '@/pages/app/Splash';
+import Categories from '@/pages/app/Categories';
+import SubCategory from '@/pages/app/SubCategory';
+import Capture from '@/pages/app/Capture';
+import Editor from '@/pages/app/Editor';
+import PayNow from '@/pages/app/PayNow';
+import BillGen from '@/pages/app/BillGen';
+import Dashboard from '@/pages/app/Dashboard';
+import Wallet from '@/pages/app/Wallet';
+import AppShell from '@/components/AppShell';
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
+const Private = ({ children }) => {
+  const { user } = useAuth();
+  return user ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
+        <Toaster position="top-center" richColors />
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          <Route path="/app" element={<Private><AppShell /></Private>}>
+            <Route index element={<Splash />} />
+            <Route path="categories" element={<Categories />} />
+            <Route path="category/:cat" element={<SubCategory />} />
+            <Route path="capture/:cat/:sub" element={<Capture />} />
+            <Route path="editor" element={<Editor />} />
+            <Route path="pay" element={<PayNow />} />
+            <Route path="bill/:id" element={<BillGen />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="wallet" element={<Wallet />} />
           </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 
