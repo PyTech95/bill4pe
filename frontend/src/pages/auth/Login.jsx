@@ -27,8 +27,8 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="self-start">
-          <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
+        <Link to="/" className="self-start bg-white inline-flex p-2 rounded-xl">
+          <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Welcome back.</div>
@@ -39,8 +39,8 @@ export default function Login() {
 
       <div className="flex items-center justify-center p-6 bg-white text-navy">
         <form onSubmit={submit} className="w-full max-w-sm">
-          <Link to="/" className="md:hidden block mb-10">
-            <img src="/logo.png" alt="Bill4Pe" className="h-12 w-auto rounded-lg" />
+          <Link to="/" className="md:hidden block mb-10 bg-white inline-flex p-2 rounded-xl">
+            <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
           </Link>
           <h1 className="font-display font-bold text-3xl">Sign in</h1>
           <p className="text-sm text-slate-500 mt-1">Use your registered email and password.</p>
