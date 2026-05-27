@@ -6,6 +6,7 @@ import './App.css';
 
 import Landing from '@/pages/Landing';
 import Login from '@/pages/auth/Login';
+import PhoneLogin from '@/pages/auth/PhoneLogin';
 import Register from '@/pages/auth/Register';
 import Splash from '@/pages/app/Splash';
 import Categories from '@/pages/app/Categories';
@@ -16,6 +17,7 @@ import PayNow from '@/pages/app/PayNow';
 import BillGen from '@/pages/app/BillGen';
 import Dashboard from '@/pages/app/Dashboard';
 import Wallet from '@/pages/app/Wallet';
+import Trips from '@/pages/app/Trips';
 import AppShell from '@/components/AppShell';
 
 const Private = ({ children }) => {
@@ -31,6 +33,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/login/phone" element={<PhoneLogin />} />
           <Route path="/register" element={<Register />} />
 
           <Route path="/app" element={<Private><AppShell /></Private>}>
@@ -43,6 +46,7 @@ function App() {
             <Route path="bill/:id" element={<BillGen />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="wallet" element={<Wallet />} />
+            <Route path="trips" element={<Trips />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -28,7 +28,9 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="font-display font-bold text-xl">BILL4PE</Link>
+        <Link to="/">
+          <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+        </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Start in 30 seconds.</div>
           <p className="text-white/60 mt-4 max-w-sm">Get ₹50 welcome credit. Generate your first AI invoice today.</p>
@@ -38,7 +40,9 @@ export default function Register() {
 
       <div className="flex items-center justify-center p-6 bg-white text-navy">
         <form onSubmit={submit} className="w-full max-w-sm">
-          <Link to="/" className="md:hidden font-display font-bold text-xl text-navy block mb-10">BILL4PE</Link>
+          <Link to="/" className="md:hidden block mb-10">
+            <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+          </Link>
           <h1 className="font-display font-bold text-3xl">Create account</h1>
           <p className="text-sm text-slate-500 mt-1">Free forever. ₹5 only per generated invoice.</p>
 
@@ -82,11 +86,18 @@ export default function Register() {
             </Button>
           </div>
 
-          <div className="mt-6 text-sm text-slate-500 text-center">
-            Already have an account?{' '}
-            <Link to="/login" className="text-navy font-semibold underline" data-testid="link-login">
-              Sign in
-            </Link>
+          <div className="mt-6 text-sm text-slate-500 text-center space-y-2">
+            <div>
+              <Link to="/login/phone" className="text-navy font-semibold underline" data-testid="link-phone-register">
+                Continue with phone instead
+              </Link>
+            </div>
+            <div>
+              Already have an account?{' '}
+              <Link to="/login" className="text-navy font-semibold underline" data-testid="link-login">
+                Sign in
+              </Link>
+            </div>
           </div>
         </form>
       </div>

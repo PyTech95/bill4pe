@@ -27,7 +27,9 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="font-display font-bold text-xl">BILL4PE</Link>
+        <Link to="/">
+          <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+        </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Welcome back.</div>
           <p className="text-white/60 mt-4 max-w-sm">Resume your AI-powered reimbursement workflow.</p>
@@ -37,7 +39,9 @@ export default function Login() {
 
       <div className="flex items-center justify-center p-6 bg-white text-navy">
         <form onSubmit={submit} className="w-full max-w-sm">
-          <Link to="/" className="md:hidden font-display font-bold text-xl text-navy block mb-10">BILL4PE</Link>
+          <Link to="/" className="md:hidden block mb-10">
+            <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+          </Link>
           <h1 className="font-display font-bold text-3xl">Sign in</h1>
           <p className="text-sm text-slate-500 mt-1">Use your registered email and password.</p>
 
@@ -71,11 +75,18 @@ export default function Login() {
             </Button>
           </div>
 
-          <div className="mt-6 text-sm text-slate-500 text-center">
-            New here?{' '}
-            <Link to="/register" className="text-navy font-semibold underline" data-testid="link-register">
-              Create an account
-            </Link>
+          <div className="mt-6 text-sm text-slate-500 text-center space-y-2">
+            <div>
+              <Link to="/login/phone" className="text-navy font-semibold underline" data-testid="link-phone-login">
+                Sign in with phone instead
+              </Link>
+            </div>
+            <div>
+              New here?{' '}
+              <Link to="/register" className="text-navy font-semibold underline" data-testid="link-register">
+                Create an account
+              </Link>
+            </div>
           </div>
         </form>
       </div>

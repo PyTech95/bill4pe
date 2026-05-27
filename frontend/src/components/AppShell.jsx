@@ -21,7 +21,7 @@ const TopBar = () => {
             <ChevronLeft className="w-5 h-5 text-navy" strokeWidth={2.2} />
           </button>
         ) : (
-          <span className="font-display font-bold text-navy text-lg tracking-tight">BILL4PE</span>
+          <img src="/logo.png" alt="Bill4Pe" className="h-7 w-auto" data-testid="appshell-logo" />
         )}
         <div className="flex items-center gap-1">
           <button

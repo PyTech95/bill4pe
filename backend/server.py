@@ -58,6 +58,15 @@ class LoginReq(BaseModel):
     email: EmailStr
     password: str
 
+class OtpRequestReq(BaseModel):
+    phone: str
+    name: Optional[str] = None
+
+class OtpVerifyReq(BaseModel):
+    phone: str
+    otp: str
+    name: Optional[str] = None
+
 class User(BaseModel):
     id: str
     email: str
@@ -168,6 +177,56 @@ async def login(body: LoginReq):
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user
+
+
+# Phone OTP (demo mode — universal OTP 123456)
+DEMO_OTP = "123456"
+
+def _norm_phone(p: str) -> str:
+    return "".join(c for c in (p or "") if c.isdigit())[-10:]
+
+@api.post("/auth/otp/request")
+async def otp_request(body: OtpRequestReq):
+    phone = _norm_phone(body.phone)
+    if len(phone) != 10:
+        raise HTTPException(400, "Invalid 10-digit phone number")
+    # DEMO: no real SMS — log it for transparency. OTP is fixed: 123456
+    logger.info(f"OTP requested for +91{phone}. Demo OTP: {DEMO_OTP}")
+    return {"ok": True, "demo_hint": "Use OTP 123456 for any number (demo mode)"}
+
+@api.post("/auth/otp/verify")
+async def otp_verify(body: OtpVerifyReq):
+    phone = _norm_phone(body.phone)
+    if len(phone) != 10:
+        raise HTTPException(400, "Invalid phone number")
+    if (body.otp or "").strip() != DEMO_OTP:
+        raise HTTPException(401, "Invalid OTP")
+    fake_email = f"+91{phone}@phone.bill4pe.local"
+    user = await db.users.find_one({"email": fake_email})
+    if not user:
+        uid = str(uuid.uuid4())
+        user_doc = {
+            "id": uid,
+            "email": fake_email,
+            "phone": f"+91{phone}",
+            "name": (body.name or f"User {phone[-4:]}"),
+            "password": hash_pw(str(uuid.uuid4())),  # random unusable password
+            "wallet_balance": 50.0,
+            "auth_provider": "phone",
+            "created_at": now_iso(),
+        }
+        await db.users.insert_one(user_doc)
+        await db.wallet_txns.insert_one({
+            "id": str(uuid.uuid4()), "user_id": uid, "type": "credit",
+            "amount": 50.0, "reason": "Welcome bonus", "created_at": now_iso()
+        })
+        user = user_doc
+    token = make_token(user["id"])
+    return {"token": token, "user": {
+        "id": user["id"], "email": user["email"], "name": user["name"],
+        "phone": user.get("phone"),
+        "wallet_balance": user.get("wallet_balance", 0.0),
+    }}
 
 
 # =================== AI Image Detection ===================
@@ -335,6 +394,91 @@ async def stats(user=Depends(get_current_user)):
         "expense_count": count,
         "by_category": [{"category": k, "amount": round(v, 2)} for k, v in by_cat.items()],
     }
+
+@api.get("/expenses/trips")
+async def trips(user=Depends(get_current_user)):
+    """Group travel expenses by day as 'trips'. Returns aggregated trip cards."""
+    cursor = db.expenses.find(
+        {"user_id": user["id"], "category": "travel"}, {"_id": 0}
+    ).sort("created_at", -1)
+    trips_by_day: dict = {}
+    async for e in cursor:
+        day = (e.get("created_at") or "")[:10]
+        if not day:
+            continue
+        t = trips_by_day.setdefault(day, {
+            "date": day, "total": 0.0, "legs": 0, "merchants": [], "expenses": [],
+        })
+        t["total"] += float(e.get("total", 0))
+        t["legs"] += 1
+        m = (e.get("payment") or {}).get("merchant_name")
+        if m and m not in t["merchants"]:
+            t["merchants"].append(m)
+        t["expenses"].append(e)
+    out = [{**v, "total": round(v["total"], 2)} for v in trips_by_day.values()]
+    out.sort(key=lambda x: x["date"], reverse=True)
+    return {"trips": out}
+
+
+@api.get("/expenses/export.csv")
+async def export_csv(
+    days: Optional[int] = None,
+    category: Optional[str] = None,
+    token: Optional[str] = None,
+    creds: HTTPAuthorizationCredentials = Depends(bearer),
+):
+    """CSV export of expenses. Accepts auth via Bearer or ?token= (for direct download)."""
+    auth_token = creds.credentials if creds else token
+    if not auth_token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=["HS256"])
+        uid = payload["uid"]
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid token")
+
+    q = {"user_id": uid}
+    if category:
+        q["category"] = category
+    if days:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        q["created_at"] = {"$gte": cutoff}
+    rows = await db.expenses.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+    import csv as csv_mod
+    buf = io.StringIO()
+    w = csv_mod.writer(buf)
+    w.writerow([
+        "Date", "Bill ID", "Category", "Sub-category", "Merchant", "UPI ID",
+        "Transaction ID", "Items", "Total (INR)", "Latitude", "Longitude",
+    ])
+    for r in rows:
+        pay = r.get("payment") or {}
+        items_str = "; ".join(
+            f"{i.get('name')} x{i.get('quantity')} @ ₹{i.get('unit_price')}"
+            for i in (r.get("items") or [])
+        )
+        w.writerow([
+            (r.get("created_at") or "")[:19].replace("T", " "),
+            r.get("bill_id") or "",
+            r.get("category", ""),
+            r.get("sub_category") or "",
+            pay.get("merchant_name") or "",
+            pay.get("merchant_upi") or "",
+            pay.get("transaction_id") or "",
+            items_str,
+            f"{float(r.get('total', 0)):.2f}",
+            pay.get("latitude") or "",
+            pay.get("longitude") or "",
+        ])
+    buf.seek(0)
+    fname = f"bill4pe-expenses-{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
 
 @api.get("/expenses/{eid}")
 async def get_expense(eid: str, user=Depends(get_current_user)):

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORIES, catByKey } from '@/lib/categories';
-import { Filter, FileText, ChevronRight, TrendingUp } from 'lucide-react';
-import api from '@/lib/api';
+import { Filter, FileText, ChevronRight, TrendingUp, Download, Plane } from 'lucide-react';
+import api, { API } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const filters = [
@@ -33,11 +33,39 @@ export default function Dashboard() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [days, cat]);
 
+  const csvUrl = () => {
+    const token = localStorage.getItem('bill4pe_token');
+    const params = new URLSearchParams({ token: token || '' });
+    if (days) params.set('days', days);
+    if (cat) params.set('category', cat);
+    return `${API}/expenses/export.csv?${params.toString()}`;
+  };
+
   return (
     <div className="space-y-5">
-      <div>
-        <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Overview</div>
-        <h1 className="font-display text-2xl font-bold text-navy mt-1">Dashboard</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Overview</div>
+          <h1 className="font-display text-2xl font-bold text-navy mt-1">Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => nav('/app/trips')}
+            data-testid="dashboard-trips-btn"
+            className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-[#0A1128]/5 text-navy text-xs font-semibold hover:bg-[#0A1128]/10"
+            title="Trip history"
+          >
+            <Plane className="w-3.5 h-3.5" /> Trips
+          </button>
+          <a
+            href={csvUrl()} target="_blank" rel="noopener noreferrer"
+            data-testid="dashboard-csv-btn"
+            className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-navy text-white text-xs font-semibold hover:bg-[#152042]"
+            title="Export as CSV"
+          >
+            <Download className="w-3.5 h-3.5" /> CSV
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

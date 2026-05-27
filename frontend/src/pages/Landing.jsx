@@ -393,7 +393,9 @@ export default function Landing() {
     <div className="min-h-screen bg-white">
       <nav className="absolute top-0 left-0 right-0 z-40">
         <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
-          <Link to="/" className="font-display font-bold text-lg tracking-tight">BILL4PE</Link>
+          <Link to="/" data-testid="nav-logo">
+            <img src="/logo.png" alt="Bill4Pe" className="h-9 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+          </Link>
           <div className="flex items-center gap-2">
             <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
             <Link to="/register" className="press-down px-4 py-2 rounded-full bg-lime text-navy font-semibold text-sm hover:bg-[#BCE300]" data-testid="nav-register">Get started</Link>
