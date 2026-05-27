@@ -1,0 +1,177 @@
+{
+  "theme_and_archetype": {
+    "domain": "Finance & Expense Management",
+    "theme": "hybrid_contrast",
+    "archetype": "4 (Swiss & High-Contrast - Premium Fintech Adaptation)",
+    "description": "A highly authoritative, clean, and lightning-fast aesthetic modeled after top-tier fintech apps like CRED, Razorpay, and Stripe. Uses pure, high-contrast structural colors (Navy, White, Black) with a single aggressive kinetic accent (Electric Lime) to guide action. No gradients on white, no muddy purples. Precision is the priority."
+  },
+  "typography": {
+    "rules": {
+      "headings": {
+        "fontFamily": "Outfit, sans-serif",
+        "weights": ["500", "700"],
+        "letterSpacing": "tracking-tight",
+        "usage": "Hero text, section titles, major numbers (wallet balance)."
+      },
+      "body": {
+        "fontFamily": "Manrope, sans-serif",
+        "weights": ["400", "500", "600"],
+        "letterSpacing": "tracking-normal",
+        "usage": "Standard UI text, descriptions, labels."
+      },
+      "data_and_numbers": {
+        "fontFamily": "'JetBrains Mono', monospace",
+        "weights": ["500"],
+        "letterSpacing": "tracking-tighter",
+        "usage": "Transaction IDs, timestamps, exact monetary values, bill items."
+      }
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body_large": "text-lg",
+      "body_base": "text-base",
+      "body_small": "text-sm text-muted-foreground",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em]"
+    }
+  },
+  "colors": {
+    "primary_brand": {
+      "navy_dark": "#0A1128",
+      "navy_light": "#152042"
+    },
+    "accent": {
+      "electric_lime": "#D4FF00",
+      "electric_lime_hover": "#BCE300"
+    },
+    "neutrals": {
+      "pure_white": "#FFFFFF",
+      "off_white": "#F4F5F7",
+      "pure_black": "#000000",
+      "slate_gray": "#64748B",
+      "border_gray": "#E2E8F0"
+    },
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "usage_rules": {
+      "background_app": "Pure White or Off-White to maximize receipt legibility.",
+      "background_marketing": "Deep Navy with Electric Lime accents for a premium \"pro\" feel.",
+      "cta_buttons": "Electric Lime with Pure Black text for maximum kinetic energy. No gradients.",
+      "text": "Pure Black on White. Pure White on Navy.",
+      "borders": "1px solid border_gray for clean separations. No soft shadows on cards."
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Mobile-first, dense but breathable. Utilize the screen fully for workflows.",
+    "scale": {
+      "container_padding": "p-4 md:p-8",
+      "section_gap": "gap-8 md:gap-16",
+      "item_gap": "gap-4",
+      "touch_targets": "min-h-[48px] min-w-[48px] (CRITICAL for mobile fintech UX)"
+    },
+    "grid_system": {
+      "marketing": "Asymmetric bento grids, grid-cols-1 md:grid-cols-12",
+      "dashboard": "Mobile-first 1-column layout, expanding to 3-columns on desktop. Dense data presentation."
+    },
+    "surfaces": {
+      "cards": "Flat, pure white background, 1px solid border (#E2E8F0), rounded-xl, NO shadow.",
+      "modals": "Bottom sheets on mobile (rounded-t-2xl), standard dialogs on desktop.",
+      "glassmorphism": "Only used for sticky headers: backdrop-blur-xl bg-white/80 (light) or bg-navy_dark/80 (dark)."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#D4FF00] text-black font-semibold rounded-full px-6 py-3 hover:bg-[#BCE300] transition-colors",
+      "secondary": "bg-[#0A1128] text-white font-semibold rounded-full px-6 py-3 hover:bg-[#152042] transition-colors",
+      "outline": "border-2 border-[#0A1128] text-[#0A1128] font-semibold rounded-full px-6 py-3"
+    },
+    "inputs": {
+      "style": "h-12 border-b-2 border-gray-200 bg-transparent rounded-none focus:border-[#0A1128] focus:ring-0 transition-colors px-0 text-lg",
+      "note": "Minimize typing. Use floating labels or clean placeholders."
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Sharp, 24x24 for standard, 32x32 for categories. Stroke width 2 or 1.5."
+    },
+    "data_testid_rules": "All interactive elements MUST have a data-testid attribute formatted as kebab-case role-based (e.g., 'pay-now-btn', 'category-food-card', 'wallet-balance-display')."
+  },
+  "animations": {
+    "transitions": "Spring animations for all route changes and bottom sheets (Framer Motion).",
+    "micro_interactions": "Haptic-style scale down on button press (scale: 0.98).",
+    "ai_scanning": "A scanning laser effect (Electric Lime line moving over the image) with skeleton loaders for text detection."
+  },
+  "screens": {
+    "marketing_landing": {
+      "hero": "Dark Navy background. Huge Outfit heading. 3D app mockup floating. Electric Lime primary CTA.",
+      "features": "Bento box layout on white background showing 'How it works' (Scan -> Pay -> Bill).",
+      "testimonials": "Marquee of user reviews with stark black-and-white avatars.",
+      "footer": "Massive typography for 'Get BILL4PE', stark black background, lime links."
+    },
+    "app_splash": {
+      "layout": "Deep Navy full screen, BILL4PE logo in center, smooth fade to Dashboard/Categories."
+    },
+    "app_dashboard_and_wallet": {
+      "wallet_card": "Dark Navy card, rounded-2xl, large JetBrains Mono text for balance, Lime 'Recharge' button.",
+      "recent_bills": "List layout. Left: Icon (Category), Middle: Merchant Name + Date, Right: Amount (JetBrains Mono).",
+      "filters": "Horizontal scrolling pill tabs."
+    },
+    "workflow_1_categories": {
+      "layout": "Grid of 10 categories (Food, Travel, etc.). 2 columns on mobile. Minimalist icons. Tap triggers bottom sheet for sub-categories."
+    },
+    "workflow_2_capture": {
+      "layout": "Full-screen camera view with overlay, or clean form for manual entry. Big circular shutter button."
+    },
+    "workflow_3_ai_editor": {
+      "layout": "Image preview at top (collapsible). Editable line-items list below. Sticky bottom bar with 'Live Total' and 'Pay Now' (Electric Lime)."
+    },
+    "workflow_4_payment": {
+      "layout": "QR Scanner overlay. Auto-captures Merchant Card (Name, UPI, Txn ID, Geo, Time). Clean success checkmark animation."
+    },
+    "workflow_5_bill_gen": {
+      "modal": "Bottom sheet confirming merchant details. Explicitly shows '-₹5 Fee from Wallet'. Swipe-to-confirm or large tap button to Generate.",
+      "pdf_preview": "Clean, official-looking PDF layout using JetBrains Mono for tabular data. Download/Share floating action buttons."
+    }
+  },
+  "media": {
+    "images": [
+      {
+        "category": "hero_app_mockup",
+        "url": "https://static.prod-images.emergentagent.com/jobs/f0b15451-231f-4b8c-b446-6955d080a223/images/52ea72a20fdc3301688eac9bb6b1385b769016962dcc6e2ebbbf5972c06eb9e0.png",
+        "description": "Premium mobile-first fintech app mockup floating in 3D space with deep navy and lime accents. Use in the landing page hero section."
+      },
+      {
+        "category": "landing_hero_bg",
+        "url": "https://static.prod-images.emergentagent.com/jobs/f0b15451-231f-4b8c-b446-6955d080a223/images/e04d5721b2f982a0cabbb2b01dd8d69caea46c4f090d340d305c9491f3315c24.png",
+        "description": "Abstract geometric deep navy background with glowing lime edges. Use for marketing sections behind content."
+      },
+      {
+        "category": "expense_lifestyle",
+        "url": "https://static.prod-images.emergentagent.com/jobs/f0b15451-231f-4b8c-b446-6955d080a223/images/b8fd9a1597502bc82ade1c40312cf65653fc13e2e8675e9b01165b2c24ae3107.png",
+        "description": "Flat lay of receipts and coffee. Use in 'How it works' or features section."
+      },
+      {
+        "category": "partner_logo_google",
+        "url": "https://images.pexels.com/photos/29257597/pexels-photo-29257597.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Google logo building exterior. Use as a placeholder for corporate trust/partner section on the landing page."
+      },
+      {
+        "category": "partner_logo_coke",
+        "url": "https://images.pexels.com/photos/9973170/pexels-photo-9973170.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Coca Cola logo sign. Use as a placeholder for corporate trust/partner section on the landing page."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the dark blue (#0A1128), pure white, pure black, and electric lime (#D4FF00) palette. NO purple. NO gradients on white.",
+    "Ensure all app routes (under /app) are mobile-first, utilizing bottom sheets, massive touch targets (min 48px), and strict 1-column layouts.",
+    "Build the landing page (/) as a desktop-premium layout with the deep navy background for the hero.",
+    "Use 'Outfit' for headings, 'Manrope' for body text, and 'JetBrains Mono' for all financial data/numbers.",
+    "All interactive elements must have semantic data-testid tags.",
+    "Integrate Lucide-react for all iconography.",
+    "Implement Framer Motion for the AI scanning overlay (a moving lime laser over an image container) and route transitions."
+  ]
+}
