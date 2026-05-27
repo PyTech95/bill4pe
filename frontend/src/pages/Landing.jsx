@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ScanLine, QrCode, FileText, Wallet, Sparkles, ArrowRight, Check,
-  Building2, ShieldCheck, Smartphone, Send,
+  Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -205,19 +205,60 @@ const Features = () => {
 };
 
 const VisionMission = () => (
-  <Section className="py-24 bg-navy text-white">
-    <div className="grid md:grid-cols-2 gap-12">
-      <div>
-        <Pill dark>Our Vision</Pill>
-        <h3 className="font-display text-3xl sm:text-4xl font-bold mt-5 tracking-tight">
+  <Section className="py-24 bg-navy text-white" id="vision">
+    <div className="max-w-3xl">
+      <Pill dark>Why we exist</Pill>
+      <h2 className="font-display text-3xl sm:text-5xl font-bold mt-4 tracking-tight">
+        We're rebuilding how India does reimbursement.
+      </h2>
+    </div>
+
+    <div className="grid md:grid-cols-2 gap-6 mt-14">
+      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
+          <Eye className="w-3 h-3" /> Our Vision
+        </div>
+        <h3 className="font-display text-2xl sm:text-3xl font-bold mt-5 tracking-tight">
           Zero-friction expense reimbursement for every Indian professional.
         </h3>
+        <p className="mt-5 text-white/60 leading-relaxed">
+          A world where no one chases a colleague for a receipt, no manager rejects a bill on a
+          technicality, and no employee waits weeks for ₹500 to come back. From the salesperson
+          in Indore to the consultant in Bengaluru — one tap, one invoice, done.
+        </p>
       </div>
-      <div>
-        <Pill dark>Our Mission</Pill>
-        <h3 className="font-display text-3xl sm:text-4xl font-bold mt-5 tracking-tight">
-          Replace paper receipts and clunky forms with a single AI-first mobile workflow.
+
+      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
+          <Target className="w-3 h-3" /> Our Mission
+        </div>
+        <h3 className="font-display text-2xl sm:text-3xl font-bold mt-5 tracking-tight">
+          Replace paper receipts and clunky expense forms with one AI-first mobile workflow.
         </h3>
+        <p className="mt-5 text-white/60 leading-relaxed">
+          We combine UPI payments, computer vision and PDF generation into a single 60-second journey.
+          What used to need a phone, a calculator, a printer and a forwarded email is now one
+          installable app on your home screen.
+        </p>
+      </div>
+    </div>
+
+    {/* Core values */}
+    <div className="mt-14">
+      <Pill dark>Our values</Pill>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        {[
+          { icon: Zap, t: 'Speed first', d: 'If it takes more than 60 seconds, we did it wrong.' },
+          { icon: ShieldCheck, t: 'Audit-ready', d: 'Every bill carries merchant, txn, geo and time.' },
+          { icon: Sparkles, t: 'AI-native', d: 'Vision and language models do the boring work.' },
+          { icon: HeartHandshake, t: 'Made for India', d: 'UPI, rupees, Indian food, real merchant flows.' },
+        ].map(({ icon: Icon, t, d }) => (
+          <div key={t} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5">
+            <Icon className="w-6 h-6 text-brand" strokeWidth={1.6} />
+            <div className="font-display font-bold mt-4">{t}</div>
+            <div className="text-xs text-white/50 mt-1.5 leading-relaxed">{d}</div>
+          </div>
+        ))}
       </div>
     </div>
   </Section>
@@ -367,16 +408,17 @@ const Footer = () => (
       <div className="md:col-span-2">
         <div className="text-xs uppercase tracking-wider text-white/40">Product</div>
         <ul className="mt-4 space-y-2 text-sm">
-          <li><a href="#how" className="hover:text-lime">How it works</a></li>
-          <li><Link to="/app" className="hover:text-lime">Launch app</Link></li>
+          <li><a href="#how" className="hover:text-brand">How it works</a></li>
+          <li><Link to="/app" className="hover:text-brand">Launch app</Link></li>
         </ul>
       </div>
       <div className="md:col-span-3">
         <div className="text-xs uppercase tracking-wider text-white/40">Company</div>
         <ul className="mt-4 space-y-2 text-sm">
-          <li><a href="#contact" className="hover:text-lime">Contact</a></li>
-          <li><a className="hover:text-lime">Privacy</a></li>
-          <li><a className="hover:text-lime">Terms</a></li>
+          <li><a href="#vision" className="hover:text-brand">Vision & Mission</a></li>
+          <li><a href="#contact" className="hover:text-brand">Contact</a></li>
+          <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
+          <li><Link to="/terms" className="hover:text-brand">Terms</Link></li>
         </ul>
       </div>
     </div>
