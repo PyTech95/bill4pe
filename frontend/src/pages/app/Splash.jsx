@@ -237,22 +237,18 @@ export default function Splash() {
             whileHover={{ y: -2 }}
             onClick={() => nav(`/app/category/${key}`)}
             data-testid={`category-${key}-card`}
-            className="press-down group relative flat-card p-4 text-left hover:border-navy hover:shadow-[0_0_0_3px_rgba(212,255,0,0.20)] transition-all overflow-hidden"
+            className="press-down group flat-card p-3 text-left hover:border-navy transition-colors flex items-center gap-3"
           >
-            {/* hover lime glow corner */}
-            <div className="absolute top-0 right-0 w-16 h-16 bg-lime/0 group-hover:bg-lime/20 rounded-bl-full transition-colors" />
-
-            <div className="relative">
-              <div className="w-11 h-11 rounded-2xl bg-[#0A1128] text-lime grid place-items-center group-hover:bg-lime group-hover:text-navy transition-colors">
-                <Icon className="w-5 h-5" strokeWidth={1.8} />
-              </div>
-              <div className="font-display font-bold text-base text-navy mt-3">{label}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
+            <div className="w-11 h-11 rounded-xl bg-[#0A1128] text-lime grid place-items-center shrink-0 group-hover:bg-lime group-hover:text-navy transition-colors">
+              <Icon className="w-5 h-5" strokeWidth={1.8} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-bold text-sm text-navy truncate">{label}</div>
+              <div className="text-[10px] text-slate-400 font-medium mt-0.5">
                 {sub.length} options
               </div>
-
-              <ChevronRight className="absolute right-0 bottom-0 w-4 h-4 text-slate-300 group-hover:text-navy transition" />
             </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy transition shrink-0" />
           </motion.button>
         ))}
       </motion.div>
