@@ -404,17 +404,31 @@ async def referrals_validate(code: str):
 
 
 # =================== AI Image Detection ===================
-FOOD_PROMPT = """You are an expert Indian food billing assistant. Analyze the food image and detect EVERY visible item.
+FOOD_PROMPT = """You are an expert Indian thali / food billing assistant. Analyze the photo and detect EVERY visible food item.
 
-For each item, return a JSON object with:
-- "name": short Indian food name (e.g., "Roti", "Dal", "Rice", "Sabji", "Thali", "Paneer", "Water Bottle", "Snacks")
-- "quantity": integer count visible
-- "unit_price": reasonable INR price per unit (typical mid-range Indian restaurant pricing)
+For each distinct dish/item, return a JSON object with:
+- "name": short Indian food name. Be specific:
+    "Roti" / "Naan" / "Tandoori Roti" / "Paratha"
+    "Dal" / "Dal Tadka" / "Dal Makhani"
+    "Rice" / "Jeera Rice" / "Biryani"
+    "Sabji" (or specific: "Paneer", "Bhindi", "Aloo Gobi", "Mixed Veg")
+    "Chicken Curry" / "Butter Chicken" / "Mutton Curry"
+    "Salad" / "Raita" / "Papad" / "Pickle" / "Chutney"
+    "Sweets" (or specific: "Gulab Jamun", "Halwa")
+    "Water Bottle" / "Cold Drink" / "Lassi" / "Buttermilk"
+- "quantity": realistic count visible. For rotis count individual pieces (e.g. 3).
+    For dal/sabji/rice use 1 (one serving bowl). For thali = 1 (the combo plate counts as 1).
+- "unit_price": reasonable INR price per unit at a typical mid-range Indian restaurant.
+    Rotis ~15, Dal ~50-60, Rice ~50, Sabji ~60-80, Chicken curry ~180-220,
+    Paneer dishes ~150-180, Thali ~150-250, Water ~20.
+
+If it's clearly a single combo "thali", return one row {"name":"Thali","quantity":1,"unit_price":<estimated>}
+PLUS optionally extra items visible alongside (water bottle, papad, sweets, etc.).
 
 Return ONLY a strict JSON array. No markdown, no prose, no code fences. Example:
-[{"name":"Roti","quantity":3,"unit_price":15},{"name":"Dal","quantity":1,"unit_price":50}]
+[{"name":"Roti","quantity":3,"unit_price":15},{"name":"Dal Tadka","quantity":1,"unit_price":55},{"name":"Jeera Rice","quantity":1,"unit_price":50},{"name":"Paneer Bhurji","quantity":1,"unit_price":150}]
 
-If the image is not food, return an empty array []."""
+If the image is not food-related, return []."""
 
 GENERIC_PROMPT = """You are an expense bill assistant. Analyze the image (could be receipt, products, bill, items).
 

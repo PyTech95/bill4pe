@@ -243,16 +243,66 @@ export default function SubCategory() {
         </div>
       </div>
 
+      {/* AI Photo Capture — Hero CTA */}
+      <motion.button
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+        whileHover={{ y: -2 }}
+        onClick={() => fileRef.current?.click()}
+        data-testid="ai-photo-capture-btn"
+        className="press-down relative w-full overflow-hidden rounded-3xl bg-navy text-white p-5 text-left group"
+      >
+        <div
+          className="absolute inset-0 opacity-60 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 85% 25%, rgba(31,111,235,0.40), transparent 50%),' +
+              'radial-gradient(circle at 10% 90%, rgba(212,255,0,0.10), transparent 50%)',
+          }}
+        />
+        <Camera className="absolute -right-4 -bottom-4 w-36 h-36 text-white/[0.06]" strokeWidth={1} />
+
+        <div className="relative">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] bg-lime text-navy">
+            <Sparkles className="w-3 h-3" /> AI Magic
+          </div>
+
+          <div className="mt-4 flex items-start gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-lime text-navy grid place-items-center shrink-0 shadow-lg shadow-lime/20 pulse-brand">
+              <Camera className="w-7 h-7" strokeWidth={1.8} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display text-xl font-bold leading-tight">
+                Snap your {(serviceType || c.label).toLowerCase()} photo
+              </div>
+              <div className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                AI detects <span className="text-lime font-semibold">Dal, Roti, Sabji, Rice</span> & estimates
+                quantities + prices — bill auto-fills in seconds.
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-2">
+            <div className="flex-1 inline-flex items-center justify-center gap-2 h-11 bg-brand hover:bg-[#1858CC] rounded-full text-white font-semibold text-sm transition-colors">
+              <Camera className="w-4 h-4" /> Capture {(serviceType || c.label)} photo
+            </div>
+          </div>
+
+          <div className="mt-3 text-[10px] text-white/40 text-center">
+            or fill items manually below ↓
+          </div>
+        </div>
+      </motion.button>
+
       {/* Items table */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">Items</label>
+          <label className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">Items (manual)</label>
           <button
             onClick={() => fileRef.current?.click()}
             data-testid="ai-scan-btn"
             className="press-down inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-lime text-navy px-2 py-1 rounded-full"
           >
-            <Sparkles className="w-3 h-3" /> AI scan bill
+            <Sparkles className="w-3 h-3" /> Re-scan
           </button>
         </div>
 
