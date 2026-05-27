@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Wallet as WalletIcon, ArrowRight, TrendingUp, Receipt, Sparkles,
-  ChevronRight, Camera, Plane,
+  Wallet as WalletIcon, ArrowRight, TrendingUp, Sparkles,
+  ChevronRight, Camera, Plane, RotateCcw, FileBarChart,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, catByKey } from '@/lib/categories';
@@ -24,14 +24,16 @@ export default function Splash() {
   const nav = useNavigate();
   const { user } = useAuth();
   const [stats, setStats] = useState({ total: 0, today: 0, count: 0 });
+  const [merchants, setMerchants] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [s, e] = await Promise.all([
+        const [s, e, m] = await Promise.all([
           api.get('/expenses/stats'),
           api.get('/expenses'),
+          api.get('/expenses/merchants/recent'),
         ]);
         if (cancelled) return;
         const expenses = e.data?.expenses || [];
@@ -44,6 +46,7 @@ export default function Splash() {
           today,
           count: s.data?.expense_count || 0,
         });
+        setMerchants(m.data?.merchants || []);
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
@@ -52,6 +55,16 @@ export default function Splash() {
   const food = useMemo(() => catByKey('food'), []);
   const otherCats = useMemo(() => CATEGORIES.filter((c) => c.key !== 'food'), []);
   const firstName = user?.name?.split(' ')[0] || 'there';
+
+  const quickPay = (m) => {
+    sessionStorage.setItem('bill4pe_draft', JSON.stringify({
+      category: m.category,
+      sub_category: m.sub_category,
+      items: [{ name: `${(catByKey(m.category)?.label) || 'Expense'} (quick-pay)`, quantity: 1, unit_price: m.last_amount || 0 }],
+      prefill_merchant: m,
+    }));
+    nav('/app/editor');
+  };
 
   return (
     <div className="space-y-6">
@@ -133,6 +146,14 @@ export default function Splash() {
           <span className="text-[11px] font-semibold text-navy">Reports</span>
         </button>
         <button
+          onClick={() => nav('/app/reports')}
+          data-testid="splash-quick-reports"
+          className="press-down flat-card p-3 flex flex-col items-start gap-1 hover:border-navy transition"
+        >
+          <FileBarChart className="w-4 h-4 text-navy" />
+          <span className="text-[11px] font-semibold text-navy">Bundles</span>
+        </button>
+        <button
           onClick={() => nav('/app/trips')}
           data-testid="splash-quick-trips"
           className="press-down flat-card p-3 flex flex-col items-start gap-1 hover:border-navy transition"
@@ -140,15 +161,41 @@ export default function Splash() {
           <Plane className="w-4 h-4 text-navy" />
           <span className="text-[11px] font-semibold text-navy">Trips</span>
         </button>
-        <button
-          onClick={() => nav('/app/dashboard')}
-          data-testid="splash-quick-bills"
-          className="press-down flat-card p-3 flex flex-col items-start gap-1 hover:border-navy transition"
-        >
-          <Receipt className="w-4 h-4 text-navy" />
-          <span className="text-[11px] font-semibold text-navy">All Bills</span>
-        </button>
       </motion.div>
+
+      {/* ------- Recent merchants (quick re-pay) ------- */}
+      {merchants.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.12 }}
+        >
+          <div className="flex items-center gap-1.5 mb-2 text-[11px] uppercase tracking-[0.25em] text-slate-400 font-bold">
+            <RotateCcw className="w-3 h-3" /> Pay again
+          </div>
+          <div className="-mx-4 px-4 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2.5">
+              {merchants.map((m) => (
+                <button
+                  key={m.merchant_name + (m.merchant_upi || '')}
+                  onClick={() => quickPay(m)}
+                  data-testid={`recent-merchant-${m.merchant_name}`}
+                  className="press-down shrink-0 w-40 flat-card p-3 text-left hover:border-navy"
+                >
+                  <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold truncate">
+                    {catByKey(m.category)?.label || m.category}
+                  </div>
+                  <div className="font-display font-bold text-navy text-sm truncate mt-1">
+                    {m.merchant_name}
+                  </div>
+                  <div className="font-mono text-xs text-brand mt-1.5 font-semibold">
+                    ₹ {m.last_amount.toFixed(0)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* ------- Section header ------- */}
       <div className="flex items-end justify-between pt-1">

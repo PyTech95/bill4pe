@@ -1,13 +1,11 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, LayoutDashboard, Wallet, LogOut, ChevronLeft } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
+import { Home, LayoutDashboard, Wallet, User, FileBarChart, ChevronLeft } from 'lucide-react';
 
 const TopBar = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const showBack = pathname !== '/app';
-  const { logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/85 border-b border-soft">
@@ -23,16 +21,14 @@ const TopBar = () => {
         ) : (
           <img src="/logo.png" alt="Bill4Pe" className="h-9 w-auto rounded-md" data-testid="appshell-logo" />
         )}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={logout}
-            data-testid="topbar-logout-btn"
-            className="press-down p-2 rounded-full hover:bg-gray-100"
-            title="Logout"
-          >
-            <LogOut className="w-4 h-4 text-slate-500" />
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/app/profile')}
+          data-testid="topbar-profile-btn"
+          className="press-down w-9 h-9 rounded-full bg-navy text-brand grid place-items-center font-display font-bold text-sm hover:bg-[#0F1631]"
+          title="Profile"
+        >
+          <User className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );
@@ -53,6 +49,10 @@ const BottomNav = () => {
         <NavLink to="/app/dashboard" className={link} data-testid="bottomnav-dashboard">
           <LayoutDashboard className="w-5 h-5" />
           <span>Dashboard</span>
+        </NavLink>
+        <NavLink to="/app/reports" className={link} data-testid="bottomnav-reports">
+          <FileBarChart className="w-5 h-5" />
+          <span>Reports</span>
         </NavLink>
         <NavLink to="/app/wallet" className={link} data-testid="bottomnav-wallet">
           <Wallet className="w-5 h-5" />

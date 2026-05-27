@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORIES, catByKey } from '@/lib/categories';
-import { Filter, FileText, ChevronRight, TrendingUp, Download, Plane } from 'lucide-react';
+import { Filter, FileText, ChevronRight, TrendingUp, Download, Plane, Search, FileBarChart } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import api, { API } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -19,6 +20,19 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ total_expenses: 0, expense_count: 0, by_category: [] });
   const [days, setDays] = useState(null);
   const [cat, setCat] = useState(null);
+  const [q, setQ] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return expenses;
+    const needle = q.toLowerCase();
+    return expenses.filter((e) =>
+      (e.payment?.merchant_name || '').toLowerCase().includes(needle) ||
+      (e.payment?.merchant_upi || '').toLowerCase().includes(needle) ||
+      (e.payment?.transaction_id || '').toLowerCase().includes(needle) ||
+      (e.bill_id || '').toLowerCase().includes(needle) ||
+      (e.items || []).some((i) => (i.name || '').toLowerCase().includes(needle))
+    );
+  }, [expenses, q]);
 
   const load = async () => {
     const params = {};
@@ -49,6 +63,14 @@ export default function Dashboard() {
           <h1 className="font-display text-2xl font-bold text-navy mt-1">Dashboard</h1>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => nav('/app/reports')}
+            data-testid="dashboard-bundles-btn"
+            className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-brand text-white text-xs font-semibold hover:bg-[#1858CC]"
+            title="Bundle into reports"
+          >
+            <FileBarChart className="w-3.5 h-3.5" /> Reports
+          </button>
           <button
             onClick={() => nav('/app/trips')}
             data-testid="dashboard-trips-btn"
@@ -141,13 +163,26 @@ export default function Dashboard() {
 
       <div>
         <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Recent bills</div>
+
+        {/* Search */}
+        <div className="relative mt-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search merchant, item, txn ID, bill ID..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="pl-10 h-11 rounded-xl border-soft text-sm"
+            data-testid="dashboard-search-input"
+          />
+        </div>
+
         <div className="mt-3 space-y-2">
-          {expenses.length === 0 && (
+          {filtered.length === 0 && (
             <div className="flat-card p-8 text-center text-slate-400 text-sm">
-              No expenses yet. Tap a category to begin.
+              {q ? `No expenses match "${q}".` : 'No expenses yet. Tap a category to begin.'}
             </div>
           )}
-          {expenses.map((e) => {
+          {filtered.map((e) => {
             const c = catByKey(e.category);
             const Icon = c?.icon || FileText;
             return (

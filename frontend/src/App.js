@@ -20,6 +20,8 @@ import BillGen from '@/pages/app/BillGen';
 import Dashboard from '@/pages/app/Dashboard';
 import Wallet from '@/pages/app/Wallet';
 import Trips from '@/pages/app/Trips';
+import Reports from '@/pages/app/Reports';
+import Profile from '@/pages/app/Profile';
 import AppShell from '@/components/AppShell';
 
 const Private = ({ children }) => {
@@ -51,6 +53,8 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="trips" element={<Trips />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

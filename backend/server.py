@@ -105,6 +105,19 @@ class ExpenseCreate(BaseModel):
 class WalletRecharge(BaseModel):
     amount: float
 
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+class ReportCreate(BaseModel):
+    title: str
+    expense_ids: List[str]
+    notes: Optional[str] = None
+
 class ContactMsg(BaseModel):
     name: str
     email: EmailStr
@@ -177,6 +190,45 @@ async def login(body: LoginReq):
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user
+
+
+@api.put("/auth/me")
+async def update_profile(body: ProfileUpdate, user=Depends(get_current_user)):
+    patch = {}
+    if body.name is not None and body.name.strip():
+        patch["name"] = body.name.strip()
+    if body.phone is not None:
+        phone = "".join(c for c in body.phone if c.isdigit())[-10:]
+        if phone and len(phone) != 10:
+            raise HTTPException(400, "Phone must be a 10-digit Indian number")
+        patch["phone"] = f"+91{phone}" if phone else None
+    if patch:
+        await db.users.update_one({"id": user["id"]}, {"$set": patch})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return updated
+
+
+@api.post("/auth/change-password")
+async def change_password(body: PasswordChange, user=Depends(get_current_user)):
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not check_pw(body.current_password, full["password"]):
+        raise HTTPException(401, "Current password is incorrect")
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    await db.users.update_one(
+        {"id": user["id"]}, {"$set": {"password": hash_pw(body.new_password)}}
+    )
+    return {"ok": True}
+
+
+@api.delete("/auth/me")
+async def delete_account(user=Depends(get_current_user)):
+    uid = user["id"]
+    await db.expenses.delete_many({"user_id": uid})
+    await db.wallet_txns.delete_many({"user_id": uid})
+    await db.reports.delete_many({"user_id": uid})
+    await db.users.delete_one({"id": uid})
+    return {"ok": True}
 
 
 # Phone OTP (demo mode — universal OTP 123456)
@@ -394,6 +446,34 @@ async def stats(user=Depends(get_current_user)):
         "expense_count": count,
         "by_category": [{"category": k, "amount": round(v, 2)} for k, v in by_cat.items()],
     }
+
+@api.get("/expenses/merchants/recent")
+async def recent_merchants(user=Depends(get_current_user)):
+    """Deduped list of recent merchants for one-tap quick re-pay."""
+    cursor = db.expenses.find(
+        {"user_id": user["id"], "payment.merchant_name": {"$ne": None}},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(50)
+    seen = set()
+    out: List[dict] = []
+    async for e in cursor:
+        pay = e.get("payment") or {}
+        m = pay.get("merchant_name")
+        if not m or m in seen:
+            continue
+        seen.add(m)
+        out.append({
+            "merchant_name": m,
+            "merchant_upi": pay.get("merchant_upi"),
+            "category": e.get("category"),
+            "sub_category": e.get("sub_category"),
+            "last_amount": float(e.get("total", 0)),
+            "last_date": (e.get("created_at") or "")[:10],
+        })
+        if len(out) >= 6:
+            break
+    return {"merchants": out}
+
 
 @api.get("/expenses/trips")
 async def trips(user=Depends(get_current_user)):
@@ -690,6 +770,205 @@ async def contact(body: ContactMsg):
         "id": str(uuid.uuid4()), "name": body.name, "email": body.email,
         "message": body.message, "created_at": now_iso()
     })
+    return {"ok": True}
+
+
+# =================== Consolidated Expense Reports ===================
+def build_report_pdf(report: dict, expenses: List[dict], user_name: str) -> bytes:
+    """Build a multi-bill expense report PDF — a single sheet per company submission."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
+                            leftMargin=18 * mm, rightMargin=18 * mm)
+    styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#050816")
+    BRAND = colors.HexColor("#1F6FEB")
+    LIGHT = colors.HexColor("#F4F5F7")
+    BORDER = colors.HexColor("#E2E8F0")
+
+    title_st = ParagraphStyle("title", parent=styles["Heading1"], fontName="Helvetica-Bold",
+                              fontSize=22, textColor=NAVY, leading=26, spaceAfter=4)
+    sub_st = ParagraphStyle("sub", parent=styles["Normal"], fontName="Helvetica",
+                            fontSize=9, textColor=colors.HexColor("#64748B"), leading=12)
+    h2_st = ParagraphStyle("h2", parent=styles["Heading2"], fontName="Helvetica-Bold",
+                           fontSize=11, textColor=NAVY, spaceBefore=8, spaceAfter=4)
+
+    story = []
+    total = sum(float(e.get("total", 0)) for e in expenses)
+    by_cat: dict = {}
+    for e in expenses:
+        c = e.get("category", "other")
+        by_cat[c] = by_cat.get(c, 0) + float(e.get("total", 0))
+
+    # Header
+    header_tbl = Table([
+        [Paragraph("<b>BILL4PE</b>", title_st),
+         Paragraph(f"<b>EXPENSE REPORT</b><br/>"
+                   f"Report ID: {report['id'][:8].upper()}<br/>"
+                   f"Date: {report['created_at'][:10]}<br/>"
+                   f"Items: {len(expenses)}", sub_st)],
+    ], colWidths=[90 * mm, 90 * mm])
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LINEBELOW", (0, 0), (-1, -1), 2, BRAND),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    story.append(header_tbl)
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(report.get("title", "Expense Report"), title_st))
+    story.append(Paragraph(f"Submitted by: <b>{user_name}</b>", sub_st))
+    if report.get("notes"):
+        story.append(Spacer(1, 4))
+        story.append(Paragraph(f"<i>{report.get('notes')}</i>", sub_st))
+    story.append(Spacer(1, 14))
+
+    # Summary
+    story.append(Paragraph("SUMMARY", h2_st))
+    sum_rows = [["Category", "Amount (INR)"]]
+    for c, v in sorted(by_cat.items(), key=lambda x: -x[1]):
+        sum_rows.append([c.title(), f"{v:.2f}"])
+    sum_rows.append(["TOTAL", f"{total:.2f}"])
+    sum_tbl = Table(sum_rows, colWidths=[120 * mm, 60 * mm])
+    sum_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+        ("INNERGRID", (0, 0), (-1, -2), 0.3, BORDER),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("BACKGROUND", (0, -1), (-1, -1), BRAND),
+        ("TEXTCOLOR", (0, -1), (-1, -1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(sum_tbl)
+    story.append(Spacer(1, 16))
+
+    # Line items
+    story.append(Paragraph("LINE ITEMS", h2_st))
+    rows = [["#", "Date", "Category", "Merchant", "Bill ID", "Amount (₹)"]]
+    for idx, e in enumerate(expenses, 1):
+        pay = e.get("payment") or {}
+        rows.append([
+            str(idx),
+            (e.get("created_at") or "")[:10],
+            (e.get("category", "") + ("/" + e["sub_category"] if e.get("sub_category") else "")).title(),
+            (pay.get("merchant_name") or "—")[:24],
+            (e.get("bill_id") or e["id"][:6].upper()),
+            f"{float(e.get('total', 0)):.2f}",
+        ])
+    rows.append(["", "", "", "", "TOTAL", f"₹ {total:.2f}"])
+    items_tbl = Table(rows, colWidths=[10 * mm, 22 * mm, 38 * mm, 50 * mm, 30 * mm, 30 * mm])
+    items_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+        ("INNERGRID", (0, 0), (-1, -2), 0.3, BORDER),
+        ("FONTNAME", (4, -1), (-1, -1), "Helvetica-Bold"),
+        ("BACKGROUND", (4, -1), (-1, -1), BRAND),
+        ("TEXTCOLOR", (4, -1), (-1, -1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(items_tbl)
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph(
+        "<b>Note:</b> This consolidated expense report is generated by BILL4PE based on "
+        "individual UPI transactions captured at the point of purchase. Each line item links "
+        "to its own audit-trail bill (merchant, UPI ID, transaction ID, geo and timestamp). "
+        "Attach this report to your reimbursement claim.", sub_st))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f"Generated: {now_iso()[:19]} UTC | BILL4PE © 2026 | billforpay.com", sub_st))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
+
+
+@api.post("/reports")
+async def create_report(body: ReportCreate, user=Depends(get_current_user)):
+    if not body.expense_ids:
+        raise HTTPException(400, "Select at least one expense")
+    if len(body.expense_ids) > 200:
+        raise HTTPException(400, "Max 200 expenses per report")
+    expenses = await db.expenses.find(
+        {"user_id": user["id"], "id": {"$in": body.expense_ids}}, {"_id": 0}
+    ).to_list(200)
+    if not expenses:
+        raise HTTPException(404, "No matching expenses found")
+    total = round(sum(float(e.get("total", 0)) for e in expenses), 2)
+    rid = str(uuid.uuid4())
+    doc = {
+        "id": rid,
+        "user_id": user["id"],
+        "title": body.title.strip() or "Expense Report",
+        "notes": body.notes,
+        "expense_ids": [e["id"] for e in expenses],
+        "expense_count": len(expenses),
+        "total": total,
+        "created_at": now_iso(),
+    }
+    await db.reports.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/reports")
+async def list_reports(user=Depends(get_current_user)):
+    reports = await db.reports.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return {"reports": reports}
+
+
+@api.get("/reports/{rid}/pdf")
+async def get_report_pdf(
+    rid: str,
+    token: Optional[str] = None,
+    creds: HTTPAuthorizationCredentials = Depends(bearer),
+):
+    auth_token = creds.credentials if creds else token
+    if not auth_token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=["HS256"])
+        uid = payload["uid"]
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid token")
+
+    report = await db.reports.find_one({"id": rid, "user_id": uid}, {"_id": 0})
+    if not report:
+        raise HTTPException(404, "Report not found")
+    expenses = await db.expenses.find(
+        {"user_id": uid, "id": {"$in": report["expense_ids"]}}, {"_id": 0}
+    ).to_list(200)
+    expenses.sort(key=lambda e: e.get("created_at", ""), reverse=False)
+    user = await db.users.find_one({"id": uid}, {"_id": 0})
+    pdf_bytes = build_report_pdf(report, expenses, user.get("name", "Customer"))
+    fname = f"report-{report['id'][:8]}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
+    )
+
+
+@api.delete("/reports/{rid}")
+async def delete_report(rid: str, user=Depends(get_current_user)):
+    res = await db.reports.delete_one({"id": rid, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Report not found")
     return {"ok": True}
 
 

@@ -33,6 +33,15 @@ export default function PayNow() {
       const d = JSON.parse(sessionStorage.getItem('bill4pe_draft') || 'null');
       if (!d) { nav('/app'); return; }
       setDraft(d);
+      // Pre-fill merchant for quick-pay flow
+      if (d.prefill_merchant) {
+        setMerchant((m) => ({
+          ...m,
+          name: d.prefill_merchant.merchant_name || '',
+          upi: d.prefill_merchant.merchant_upi || '',
+        }));
+        setStage('confirm');
+      }
     } catch { nav('/app'); }
 
     if (navigator.geolocation) {
