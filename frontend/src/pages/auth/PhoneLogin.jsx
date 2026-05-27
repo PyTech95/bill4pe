@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Phone, Smartphone, Loader2, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Phone, Smartphone, Loader2, ArrowLeft, Gift } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
@@ -10,18 +10,28 @@ import Logo from '@/components/Logo';
 
 export default function PhoneLogin() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = (searchParams.get('ref') || '').toUpperCase();
   const [step, setStep] = useState('phone'); // phone | otp
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  const [refMeta, setRefMeta] = useState(null);
 
   useEffect(() => {
     if (resendIn <= 0) return;
     const id = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [resendIn]);
+
+  useEffect(() => {
+    if (!refCode) return;
+    api.get(`/referrals/validate/${refCode}`)
+      .then(({ data }) => setRefMeta(data))
+      .catch(() => setRefMeta(null));
+  }, [refCode]);
 
   const requestOtp = async () => {
     const digits = phone.replace(/\D/g, '').slice(-10);
@@ -42,7 +52,9 @@ export default function PhoneLogin() {
     setLoading(true);
     try {
       const digits = phone.replace(/\D/g, '').slice(-10);
-      const { data } = await api.post('/auth/otp/verify', { phone: digits, otp, name });
+      const { data } = await api.post('/auth/otp/verify', {
+        phone: digits, otp, name, referrer_code: refMeta ? refCode : null,
+      });
       localStorage.setItem('bill4pe_token', data.token);
       localStorage.setItem('bill4pe_user', JSON.stringify(data.user));
       toast.success(`Welcome${data.user?.name ? ', ' + data.user.name.split(' ')[0] : ''}!`);
@@ -83,6 +95,21 @@ export default function PhoneLogin() {
             <>
               <h1 className="font-display font-bold text-3xl">Phone login</h1>
               <p className="text-sm text-slate-500 mt-1">We'll send a 6-digit OTP to verify.</p>
+
+              {refMeta && (
+                <div className="mt-4 flex items-start gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-3" data-testid="referral-banner">
+                  <div className="w-9 h-9 rounded-xl bg-brand text-white grid place-items-center shrink-0">
+                    <Gift className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-navy text-sm">{refMeta.referrer_name} invited you</div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      You'll both get <span className="font-bold text-brand">₹{refMeta.bonus}</span> wallet credit on signup.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-8 space-y-5">
                 <div>
                   <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Name (optional)</label>

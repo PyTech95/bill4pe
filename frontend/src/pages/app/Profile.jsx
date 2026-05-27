@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Lock, LogOut, Trash2, Loader2, Save } from 'lucide-react';
+import { User, Mail, Phone, Lock, LogOut, Trash2, Loader2, Save, Gift, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -152,6 +152,22 @@ export default function Profile() {
           </Button>
         </div>
       )}
+
+      {/* Refer & earn */}
+      <button
+        onClick={() => nav('/app/referrals')}
+        data-testid="profile-refer-btn"
+        className="press-down w-full flat-card p-4 flex items-center gap-3 hover:border-navy"
+      >
+        <div className="w-10 h-10 rounded-xl bg-brand text-white grid place-items-center">
+          <Gift className="w-5 h-5" />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="font-semibold text-navy">Refer & earn ₹50</div>
+          <div className="text-xs text-slate-500">Invite a friend, both get wallet credit</div>
+        </div>
+        <ChevronRight className="w-4 h-4 text-slate-300" />
+      </button>
 
       {/* Sign out */}
       <button

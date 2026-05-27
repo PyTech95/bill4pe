@@ -22,6 +22,7 @@ import Wallet from '@/pages/app/Wallet';
 import Trips from '@/pages/app/Trips';
 import Reports from '@/pages/app/Reports';
 import Profile from '@/pages/app/Profile';
+import Referrals from '@/pages/app/Referrals';
 import AppShell from '@/components/AppShell';
 
 const Private = ({ children }) => {
@@ -55,6 +56,7 @@ function App() {
             <Route path="trips" element={<Trips />} />
             <Route path="reports" element={<Reports />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="referrals" element={<Referrals />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

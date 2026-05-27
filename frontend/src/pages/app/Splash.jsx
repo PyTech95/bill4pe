@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Wallet as WalletIcon, TrendingUp, Sparkles,
-  ChevronRight, Plane, RotateCcw, FileBarChart,
+  ChevronRight, Plane, RotateCcw, FileBarChart, Gift,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, catByKey } from '@/lib/categories';
@@ -243,6 +243,36 @@ export default function Splash() {
           </motion.button>
         ))}
       </motion.div>
+
+      {/* ------- Refer & earn banner ------- */}
+      <motion.button
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.35 }}
+        onClick={() => nav('/app/referrals')}
+        data-testid="splash-refer-banner"
+        className="press-down relative w-full overflow-hidden rounded-2xl bg-navy text-white p-4 text-left group"
+      >
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 90% 30%, rgba(31,111,235,0.45), transparent 55%)',
+          }}
+        />
+        <Gift className="absolute -right-3 -bottom-3 w-24 h-24 text-white/[0.06]" strokeWidth={1} />
+        <div className="relative flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-brand text-white grid place-items-center shrink-0">
+            <Gift className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.25em] text-brand/90 font-bold">Refer & earn</div>
+            <div className="font-display font-bold text-base mt-0.5 leading-tight">
+              Invite a friend, both get ₹50
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-brand transition-transform group-hover:translate-x-1" />
+        </div>
+      </motion.button>
 
       {/* ------- Tip card (only if user has no bills yet) ------- */}
       {stats.count === 0 && (

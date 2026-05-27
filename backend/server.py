@@ -53,6 +53,7 @@ class RegisterReq(BaseModel):
     email: EmailStr
     password: str
     name: str
+    referrer_code: Optional[str] = None
 
 class LoginReq(BaseModel):
     email: EmailStr
@@ -66,6 +67,7 @@ class OtpVerifyReq(BaseModel):
     phone: str
     otp: str
     name: Optional[str] = None
+    referrer_code: Optional[str] = None
 
 class User(BaseModel):
     id: str
@@ -138,6 +140,76 @@ def make_token(uid: str) -> str:
     payload = {"uid": uid, "exp": datetime.now(timezone.utc) + timedelta(days=30)}
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
+
+# ============== Referral helpers ==============
+REFERRAL_BONUS = 50.0
+_REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/1/I/O
+
+def gen_referral_code() -> str:
+    import secrets
+    return "".join(secrets.choice(_REF_ALPHABET) for _ in range(6))
+
+async def ensure_referral_code(uid: str) -> str:
+    user = await db.users.find_one({"id": uid}, {"_id": 0, "referral_code": 1})
+    code = (user or {}).get("referral_code")
+    if code:
+        return code
+    # Generate a unique code
+    for _ in range(20):
+        candidate = gen_referral_code()
+        exists = await db.users.find_one({"referral_code": candidate}, {"_id": 1})
+        if not exists:
+            await db.users.update_one({"id": uid}, {"$set": {"referral_code": candidate}})
+            return candidate
+    raise HTTPException(500, "Could not generate referral code")
+
+async def apply_referral(new_user_id: str, referrer_code: Optional[str]) -> Optional[str]:
+    """If referrer_code is valid and isn't self, credit ₹50 to both users.
+    Returns referrer name or None."""
+    if not referrer_code:
+        return None
+    code = referrer_code.strip().upper()
+    if not code:
+        return None
+    referrer = await db.users.find_one({"referral_code": code})
+    if not referrer or referrer["id"] == new_user_id:
+        return None
+    # Check this user hasn't already been credited
+    existing = await db.referrals.find_one({"referee_id": new_user_id})
+    if existing:
+        return None
+    # Credit both
+    now = now_iso()
+    rid = str(uuid.uuid4())
+    await db.referrals.insert_one({
+        "id": rid,
+        "referrer_id": referrer["id"],
+        "referee_id": new_user_id,
+        "bonus_each": REFERRAL_BONUS,
+        "created_at": now,
+    })
+    # Referrer
+    await db.users.update_one(
+        {"id": referrer["id"]},
+        {"$inc": {"wallet_balance": REFERRAL_BONUS}},
+    )
+    await db.wallet_txns.insert_one({
+        "id": str(uuid.uuid4()), "user_id": referrer["id"], "type": "credit",
+        "amount": REFERRAL_BONUS, "reason": "Referral bonus (friend joined)",
+        "created_at": now,
+    })
+    # Referee
+    await db.users.update_one(
+        {"id": new_user_id},
+        {"$inc": {"wallet_balance": REFERRAL_BONUS}},
+    )
+    await db.wallet_txns.insert_one({
+        "id": str(uuid.uuid4()), "user_id": new_user_id, "type": "credit",
+        "amount": REFERRAL_BONUS, "reason": f"Welcome referral bonus (invited by {referrer.get('name','a friend')})",
+        "created_at": now,
+    })
+    return referrer.get("name")
+
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
     if not creds:
         raise HTTPException(401, "Not authenticated")
@@ -173,8 +245,14 @@ async def register(body: RegisterReq):
         "id": str(uuid.uuid4()), "user_id": uid, "type": "credit",
         "amount": 50.0, "reason": "Welcome bonus", "created_at": now_iso()
     })
+    # Apply referral if any
+    await apply_referral(uid, body.referrer_code)
+    # Always ensure code exists for this new user
+    await ensure_referral_code(uid)
+    # Fetch fresh balance after possible referral bonus
+    fresh = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
     token = make_token(uid)
-    return {"token": token, "user": {"id": uid, "email": doc["email"], "name": doc["name"], "wallet_balance": 50.0}}
+    return {"token": token, "user": fresh}
 
 @api.post("/auth/login")
 async def login(body: LoginReq):
@@ -255,7 +333,8 @@ async def otp_verify(body: OtpVerifyReq):
         raise HTTPException(401, "Invalid OTP")
     fake_email = f"+91{phone}@phone.bill4pe.local"
     user = await db.users.find_one({"email": fake_email})
-    if not user:
+    is_new = user is None
+    if is_new:
         uid = str(uuid.uuid4())
         user_doc = {
             "id": uid,
@@ -272,13 +351,56 @@ async def otp_verify(body: OtpVerifyReq):
             "id": str(uuid.uuid4()), "user_id": uid, "type": "credit",
             "amount": 50.0, "reason": "Welcome bonus", "created_at": now_iso()
         })
-        user = user_doc
+        await apply_referral(uid, body.referrer_code)
+        await ensure_referral_code(uid)
+        user = await db.users.find_one({"id": uid})
     token = make_token(user["id"])
     return {"token": token, "user": {
         "id": user["id"], "email": user["email"], "name": user["name"],
         "phone": user.get("phone"),
         "wallet_balance": user.get("wallet_balance", 0.0),
+        "referral_code": user.get("referral_code"),
     }}
+
+
+# =================== Referral program ===================
+@api.get("/referrals/me")
+async def referrals_me(user=Depends(get_current_user)):
+    code = await ensure_referral_code(user["id"])
+    refs = await db.referrals.find(
+        {"referrer_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    items: List[dict] = []
+    for r in refs:
+        ref_user = await db.users.find_one(
+            {"id": r["referee_id"]}, {"_id": 0, "name": 1, "created_at": 1}
+        )
+        items.append({
+            "id": r["id"],
+            "referee_name": (ref_user or {}).get("name", "Friend"),
+            "bonus": float(r.get("bonus_each", REFERRAL_BONUS)),
+            "joined_at": r.get("created_at"),
+        })
+    earnings = round(sum(i["bonus"] for i in items), 2)
+    return {
+        "code": code,
+        "bonus_per_referral": REFERRAL_BONUS,
+        "total_referrals": len(items),
+        "total_earnings": earnings,
+        "referrals": items,
+    }
+
+
+@api.get("/referrals/validate/{code}")
+async def referrals_validate(code: str):
+    code = (code or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Empty code")
+    ref = await db.users.find_one({"referral_code": code}, {"_id": 0, "name": 1})
+    if not ref:
+        raise HTTPException(404, "Invalid code")
+    return {"valid": True, "referrer_name": ref.get("name", "A friend"), "bonus": REFERRAL_BONUS}
+
 
 
 # =================== AI Image Detection ===================

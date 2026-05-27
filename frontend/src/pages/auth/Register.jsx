@@ -1,24 +1,36 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Mail, Lock, User, ArrowLeft, Gift } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 export default function Register() {
   const nav = useNavigate();
   const { register } = useAuth();
+  const [searchParams] = useSearchParams();
+  const refCode = (searchParams.get('ref') || '').toUpperCase();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [refMeta, setRefMeta] = useState(null); // { referrer_name, bonus }
+
+  useEffect(() => {
+    if (!refCode) return;
+    api.get(`/referrals/validate/${refCode}`)
+      .then(({ data }) => setRefMeta(data))
+      .catch(() => setRefMeta(null));
+  }, [refCode]);
 
   const submit = async (e) => {
     e.preventDefault();
     if (form.password.length < 6) { toast.error('Password must be 6+ chars'); return; }
     setLoading(true);
     try {
-      await register(form.email, form.password, form.name);
-      toast.success('Welcome to BILL4PE! ₹50 welcome bonus added.');
+      const user = await register(form.email, form.password, form.name, refMeta ? refCode : null);
+      const credit = (user?.wallet_balance ?? 50);
+      toast.success(`Welcome to BILL4PE! ₹${credit.toFixed(0)} added to your wallet.`);
       nav('/app');
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Registration failed');
@@ -52,6 +64,22 @@ export default function Register() {
           </Link>
           <h1 className="font-display font-bold text-3xl">Create account</h1>
           <p className="text-sm text-slate-500 mt-1">Free forever. ₹5 only per generated invoice.</p>
+
+          {refMeta && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-3" data-testid="referral-banner">
+              <div className="w-9 h-9 rounded-xl bg-brand text-white grid place-items-center shrink-0">
+                <Gift className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-navy text-sm">
+                  {refMeta.referrer_name} invited you
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  You'll both get <span className="font-bold text-brand">₹{refMeta.bonus}</span> wallet credit on signup.
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-8 space-y-5">
             <div className="relative">
