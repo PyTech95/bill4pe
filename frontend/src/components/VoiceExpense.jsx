@@ -39,12 +39,26 @@ export const VoiceExpense = () => {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
-      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      // Low bitrate (24kbps) keeps voice intelligible while uploads stay tiny & fast
+      const opts = mime
+        ? { mimeType: mime, audioBitsPerSecond: 24000 }
+        : { audioBitsPerSecond: 24000 };
+      let rec;
+      try { rec = new MediaRecorder(stream, opts); }
+      catch { rec = new MediaRecorder(stream); }
       recorderRef.current = rec;
       chunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data?.size) chunksRef.current.push(e.data); };

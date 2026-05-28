@@ -55,6 +55,10 @@ class RegisterReq(BaseModel):
     password: str
     name: str
     referrer_code: Optional[str] = None
+    user_type: Optional[str] = "individual"  # "individual" or "corporate"
+    corporate_name: Optional[str] = None
+    subscription_plan: Optional[str] = None  # "monthly_50" | "monthly_100" | "quarterly_50" | "quarterly_100" | "yearly_50" | "yearly_100"
+    employee_limit: Optional[int] = None
 
 class LoginReq(BaseModel):
     email: EmailStr
@@ -252,12 +256,20 @@ async def register(body: RegisterReq):
     if existing:
         raise HTTPException(400, "Email already registered")
     uid = str(uuid.uuid4())
+    user_type = (body.user_type or "individual").lower().strip()
+    if user_type not in ("individual", "corporate"):
+        user_type = "individual"
     doc = {
         "id": uid,
         "email": body.email.lower(),
         "name": body.name,
         "password": hash_pw(body.password),
         "wallet_balance": 50.0,  # 50 INR welcome bonus
+        "user_type": user_type,
+        "corporate_name": (body.corporate_name or "").strip() if user_type == "corporate" else None,
+        "subscription_plan": (body.subscription_plan or "").strip() if user_type == "corporate" else None,
+        "employee_limit": int(body.employee_limit) if (user_type == "corporate" and body.employee_limit) else None,
+        "subscription_status": "trial" if user_type == "corporate" else None,
         "created_at": now_iso(),
     }
     await db.users.insert_one(doc)
@@ -742,31 +754,15 @@ async def scan_receipt(file: UploadFile = File(...), user=Depends(get_current_us
 
 
 # =================== Voice Expense Entry (Whisper STT + Gemini parse) ===================
-VOICE_PARSE_PROMPT = """You are an expert expense parser for an Indian reimbursement app. The user spoke a short voice note (Hindi, English, or mixed Hinglish).
+VOICE_PARSE_PROMPT = """Parse this Indian expense voice note (Hindi/English/Hinglish) into STRICT JSON only (no markdown, no fences):
+{"category":"food|travel|hotel|stationery|gift|pantry|flower|grocery|cleaning|other","sub_category":"<short>","merchant_name":"<or empty>","total_amount":<INR number>,"items":[{"name":"<str>","quantity":<int>,"unit_price":<float>}]}
 
-Extract these fields and return STRICT JSON ONLY (no markdown, no prose, no code fences):
-{
-  "category": one of ["food","travel","hotel","stationery","gift","pantry","flower","grocery","cleaning","other"],
-  "sub_category": one short string fitting the category (e.g. "Lunch","Dinner","Cab","Flight","Lodging","Office","Client","Tea/Coffee","Bouquet","Daily","Housekeeping","Misc"),
-  "merchant_name": short string or "" if not mentioned,
-  "total_amount": number (INR) if a total is mentioned, else 0,
-  "items": array of {"name": str, "quantity": int, "unit_price": float} — derive items from the speech. If only a total is mentioned (e.g. "spent 250 on lunch"), create one item with name=sub_category, quantity=1, unit_price=total.
-}
-
+If only total mentioned (e.g. "spent 250 on lunch"), create one item: name=sub_category, qty=1, price=total.
 Examples:
-"Spent 250 on lunch at Saravana Bhavan"
-=> {"category":"food","sub_category":"Lunch","merchant_name":"Saravana Bhavan","total_amount":250,"items":[{"name":"Lunch","quantity":1,"unit_price":250}]}
+"Spent 250 on lunch at Saravana Bhavan" -> {"category":"food","sub_category":"Lunch","merchant_name":"Saravana Bhavan","total_amount":250,"items":[{"name":"Lunch","quantity":1,"unit_price":250}]}
+"Cab 450 Uber" -> {"category":"travel","sub_category":"Cab","merchant_name":"Uber","total_amount":450,"items":[{"name":"Cab fare","quantity":1,"unit_price":450}]}
 
-"Cab to airport 450 rupees Uber"
-=> {"category":"travel","sub_category":"Cab","merchant_name":"Uber","total_amount":450,"items":[{"name":"Cab fare","quantity":1,"unit_price":450}]}
-
-"कल 600 का dinner किया, 3 roti, dal aur paneer"
-=> {"category":"food","sub_category":"Dinner","merchant_name":"","total_amount":600,"items":[{"name":"Roti","quantity":3,"unit_price":15},{"name":"Dal","quantity":1,"unit_price":55},{"name":"Paneer","quantity":1,"unit_price":500}]}
-
-"Office stationery 1200 staples और pen"
-=> {"category":"stationery","sub_category":"Office","merchant_name":"","total_amount":1200,"items":[{"name":"Office supplies","quantity":1,"unit_price":1200}]}
-
-If unclear, fall back to category="other", sub_category="Misc". Always return valid JSON."""
+If unclear: category="other", sub_category="Misc". Output JSON only."""
 
 
 @api.post("/voice/expense")
@@ -1167,9 +1163,22 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
         amt = float(it["quantity"]) * float(it["unit_price"])
         rows.append([str(idx), it["name"], f"{it['quantity']:g}",
                      f"{it['unit_price']:.2f}", f"{amt:.2f}"])
-    rows.append(["", "", "", "TOTAL", f"₹ {float(expense['total']):.2f}"])
+
+    subtotal = float(expense.get("total", 0) or 0)
+    # Convenience Fee row (charged when bill is generated)
+    show_fee = bool(expense.get("bill_generated"))
+    fee_amt = float(BILL_FEE) if show_fee else 0.0
+    grand_total = subtotal + fee_amt
+
+    if show_fee:
+        rows.append(["", "", "", "Subtotal", f"{subtotal:.2f}"])
+        rows.append(["", "Convenience Fee (Bill Generation)", "", "", f"{fee_amt:.2f}"])
+        rows.append(["", "", "", "GRAND TOTAL", f"₹ {grand_total:.2f}"])
+    else:
+        rows.append(["", "", "", "TOTAL", f"₹ {subtotal:.2f}"])
+
     items_tbl = Table(rows, colWidths=[12 * mm, 88 * mm, 18 * mm, 30 * mm, 32 * mm])
-    items_tbl.setStyle(TableStyle([
+    base_style = [
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
@@ -1177,15 +1186,33 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
         ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
-        ("INNERGRID", (0, 0), (-1, -2), 0.3, BORDER),
-        ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
-        ("BACKGROUND", (3, -1), (-1, -1), LIME),
-        ("TEXTCOLOR", (3, -1), (-1, -1), NAVY),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    ]
+    if show_fee:
+        # last row = Grand Total; -2 = Convenience Fee; -3 = Subtotal
+        base_style += [
+            ("INNERGRID", (0, 0), (-1, -4), 0.3, BORDER),
+            ("FONTNAME", (3, -3), (-1, -3), "Helvetica-Bold"),
+            ("BACKGROUND", (3, -3), (-1, -3), LIGHT),
+            ("ALIGN", (1, -2), (1, -2), "LEFT"),
+            ("FONTNAME", (1, -2), (1, -2), "Helvetica-Bold"),
+            ("TEXTCOLOR", (1, -2), (1, -2), colors.HexColor("#64748B")),
+            ("BACKGROUND", (1, -2), (-1, -2), LIGHT),
+            ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+            ("BACKGROUND", (3, -1), (-1, -1), LIME),
+            ("TEXTCOLOR", (3, -1), (-1, -1), NAVY),
+        ]
+    else:
+        base_style += [
+            ("INNERGRID", (0, 0), (-1, -2), 0.3, BORDER),
+            ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+            ("BACKGROUND", (3, -1), (-1, -1), LIME),
+            ("TEXTCOLOR", (3, -1), (-1, -1), NAVY),
+        ]
+    items_tbl.setStyle(TableStyle(base_style))
     story.append(items_tbl)
     story.append(Spacer(1, 12))
 

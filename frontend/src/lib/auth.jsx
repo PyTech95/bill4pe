@@ -24,11 +24,11 @@ export function AuthProvider({ children }) {
     } finally { setLoading(false); }
   };
 
-  const register = async (email, password, name, referrerCode = null) => {
+  const register = async (email, password, name, referrerCode = null, extra = {}) => {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', {
-        email, password, name, referrer_code: referrerCode,
+        email, password, name, referrer_code: referrerCode, ...extra,
       });
       persist(data.token, data.user);
       return data.user;
