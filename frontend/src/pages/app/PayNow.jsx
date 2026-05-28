@@ -93,7 +93,23 @@ export default function PayNow() {
       setScanStatus('starting');
       setScanError('');
 
-      // Hard-stop watchdog — covers iOS in-app WebViews that never resolve getUserMedia
+      // Quick device check — if no camera APIs available at all (desktop preview, blocked WebView),
+      // skip the long wait and surface manual entry immediately.
+      const hasMediaApi = typeof navigator !== 'undefined'
+        && !!navigator.mediaDevices
+        && typeof navigator.mediaDevices.getUserMedia === 'function';
+      if (!hasMediaApi) {
+        setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
+        setScanError(
+          browserInfo.isInApp
+            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya UPI manually enter kariye.`
+            : 'Is browser/device par camera available nahin hai. UPI manually enter kariye.'
+        );
+        return;
+      }
+
+      // Hard-stop watchdog — covers iOS in-app WebViews that never resolve getUserMedia.
+      // Reduced from 12s -> 5s so users see the manual-entry CTA much faster.
       probeTimerRef.current = setTimeout(() => {
         if (cancelled) return;
         // Don't override if scanner already running
@@ -107,7 +123,7 @@ export default function PayNow() {
             ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
             : 'Camera response nahin de raha. Neeche UPI manually enter kariye.'
         );
-      }, 12000);
+      }, 5000);
 
       // NOTE: do NOT probe getUserMedia separately on iOS — calling getUserMedia twice
       // (once to probe, once via Html5Qrcode) makes iOS Safari hang indefinitely because
@@ -375,6 +391,15 @@ export default function PayNow() {
             </div>
           )}
 
+          {/* Always-visible manual entry CTA — above the camera box so users never have to wait */}
+          <button
+            onClick={skipScan}
+            data-testid="top-manual-entry-btn"
+            className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-lime text-navy text-sm font-bold shadow-sm hover:brightness-95"
+          >
+            <KeyRound className="w-4 h-4" /> Enter UPI ID Manually (Skip Camera)
+          </button>
+
           <div className="flat-card p-3 relative">
             <div
               id="qr-reader"
@@ -392,9 +417,9 @@ export default function PayNow() {
                 <button
                   onClick={skipScan}
                   data-testid="starting-manual-fallback-btn"
-                  className="press-down mt-4 inline-flex items-center gap-1.5 text-[11px] text-white/80 underline underline-offset-2"
+                  className="press-down mt-5 inline-flex items-center gap-2 h-11 px-5 bg-lime text-navy rounded-full font-bold text-sm"
                 >
-                  <KeyRound className="w-3 h-3" /> Camera not opening? Enter UPI manually
+                  <KeyRound className="w-4 h-4" /> Enter UPI Manually
                 </button>
               </div>
             )}
@@ -448,13 +473,6 @@ export default function PayNow() {
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
           </div>
-          <button
-            onClick={skipScan}
-            data-testid="skip-scan-btn"
-            className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl border border-soft bg-white text-navy text-sm font-semibold hover:bg-slate-50"
-          >
-            <KeyRound className="w-4 h-4" /> Can't scan? Enter UPI ID manually
-          </button>
         </div>
       )}
 
