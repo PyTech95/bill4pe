@@ -23,6 +23,19 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-28 (Hotel category redesigned)
+- **Dedicated HotelSubCategory page** (separate route `/app/category/hotel`):
+  - Sub-categories now Room Types: **Standard Room (default)**, Deluxe Room, Suite, Family Room, Dormitory, Other
+  - **Check-in** auto-set to today (read-only "Today (auto)" badge)
+  - **Check-out** picks from native date input (calendar), defaults to today+1, auto-bumps if check-in changes
+  - **Hotel name** input
+  - **Per-night rate** input
+  - Live **Booking Summary** card: Nights · Room · Rate/night · **TOTAL** (nights × rate) — updates in real time
+  - Notes voice mic + GPS + Pay Now bar
+- **Backend `PaymentInfo.stay`** (StayInfo) added: hotel_name, room_type, check_in, check_out, nights, per_night_rate, nature_of_business
+- **Bill PDF** now renders a dedicated **STAY DETAILS** table (7 rows: hotel, room type, in/out dates, nights, rate, total) with lime-highlighted Total Amount cell, only when expense has stay metadata
+- End-to-end tested: 2-night Deluxe Room stay at Taj Palace → expense + bill → PDF text confirms all stay fields + merchant details + notes
+
 ## What's Been Implemented — 2026-05-28 (Travel category redesigned)
 - **Dedicated TravelSubCategory page** (separate route `/app/category/travel`) — completely different flow from Food:
   - Sub-categories reordered: **Auto Booking (default)**, E-Rickshaw, Bike, Cab, Bus, Taxi, Self Booking, Flight, Train, Toll (flight/train moved to bottom)

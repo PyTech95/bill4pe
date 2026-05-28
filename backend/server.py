@@ -97,6 +97,15 @@ class TripInfo(BaseModel):
     drop_lng: Optional[float] = None
     nature_of_business: Optional[str] = None  # e.g. "Auto Driver"
 
+class StayInfo(BaseModel):
+    hotel_name: Optional[str] = None
+    room_type: Optional[str] = None
+    check_in: Optional[str] = None       # YYYY-MM-DD
+    check_out: Optional[str] = None      # YYYY-MM-DD
+    nights: Optional[int] = None
+    per_night_rate: Optional[float] = None
+    nature_of_business: Optional[str] = None  # e.g. "Hotel & Lodging"
+
 class PaymentInfo(BaseModel):
     merchant_name: Optional[str] = None
     merchant_upi: Optional[str] = None
@@ -107,6 +116,7 @@ class PaymentInfo(BaseModel):
     longitude: Optional[float] = None
     payment_method: str = "UPI"  # GPay/PhonePe/Paytm/BharatPe/BHIM
     trip: Optional[TripInfo] = None
+    stay: Optional[StayInfo] = None
 
 class ExpenseCreate(BaseModel):
     category: str
@@ -1019,11 +1029,16 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
 
     pay = expense.get("payment", {}) or {}
     trip = pay.get("trip") or None
+    stay = pay.get("stay") or None
     # Merchant info
     cat_label = (expense.get("category") or "").title() or "—"
     sub_label = expense.get("sub_category") or ""
-    # Prefer trip.nature_of_business when present (e.g. "Auto Driver")
-    nature = (trip or {}).get("nature_of_business") if trip else None
+    # Prefer trip/stay nature_of_business when present
+    nature = None
+    if trip:
+        nature = trip.get("nature_of_business")
+    if stay and not nature:
+        nature = stay.get("nature_of_business")
     if not nature:
         nature = f"{cat_label}{' / ' + sub_label if sub_label else ''}"
     story.append(Paragraph("MERCHANT DETAILS", h2_st))
@@ -1086,6 +1101,41 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
     ]))
     story.append(items_tbl)
     story.append(Spacer(1, 12))
+
+    # Stay details (only for hotel category)
+    if stay and (stay.get("hotel_name") or stay.get("check_in") or stay.get("nights")):
+        story.append(Paragraph("STAY DETAILS", h2_st))
+        try:
+            rate = float(stay.get("per_night_rate") or 0)
+        except Exception:
+            rate = 0.0
+        nights = stay.get("nights") or 0
+        stay_tbl = Table([
+            ["Hotel Name", stay.get("hotel_name") or "—"],
+            ["Room Type", stay.get("room_type") or "—"],
+            ["Check-in", stay.get("check_in") or "—"],
+            ["Check-out", stay.get("check_out") or "—"],
+            ["Number of Nights", f"{nights} night{'s' if nights != 1 else ''}"],
+            ["Per-night Rate", f"₹ {rate:.2f}" if rate else "—"],
+            ["Total Amount", f"₹ {float(expense.get('total', 0)):.2f}"],
+        ], colWidths=[55 * mm, 125 * mm])
+        stay_tbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#64748B")),
+            ("BACKGROUND", (0, 0), (0, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, BORDER),
+            ("FONTNAME", (1, -1), (1, -1), "Helvetica-Bold"),
+            ("BACKGROUND", (1, -1), (1, -1), LIME),
+            ("TEXTCOLOR", (1, -1), (1, -1), NAVY),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(stay_tbl)
+        story.append(Spacer(1, 12))
 
     # Trip details (only for travel category)
     if trip and (trip.get("from_text") or trip.get("to_text") or trip.get("pickup_lat") is not None):
