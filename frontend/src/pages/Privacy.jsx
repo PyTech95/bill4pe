@@ -5,7 +5,7 @@ export default function Privacy() {
   return (
     <LegalLayout title="Privacy Policy" updatedOn="May 27, 2026">
       <P>
-        BILL4PE ("we", "us", "our") is operated under the brand billforpay.com. This Privacy
+        BILL4PE ("we", "us", "our") is operated under the brand www.bill4pe.com. This Privacy
         Policy describes how we collect, use, store and protect personal information when you
         use the BILL4PE mobile app, web app and related services (the "Service").
       </P>
@@ -99,7 +99,7 @@ export default function Privacy() {
       <P>
         Questions about this policy? Reach us via the contact form on{' '}
         <a href="/#contact" className="text-brand underline">our home page</a>{' '}
-        or email <span className="text-brand">privacy@billforpay.com</span>.
+        or email <span className="text-brand">privacy@bill4pe.com</span>.
       </P>
     </LegalLayout>
   );

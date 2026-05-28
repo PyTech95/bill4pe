@@ -218,7 +218,7 @@ export default function Profile() {
       </AlertDialog>
 
       <div className="text-center text-xs text-slate-400 pb-4">
-        BILL4PE · billforpay.com · v1.0
+        BILL4PE · www.bill4pe.com · v1.0
       </div>
     </div>
   );

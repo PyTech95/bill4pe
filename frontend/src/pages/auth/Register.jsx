@@ -47,7 +47,7 @@ export default function Register() {
           <div className="font-display text-5xl font-bold leading-tight">Start in 30 seconds.</div>
           <p className="text-white/60 mt-4 max-w-sm">Get ₹50 welcome credit. Generate your first AI invoice today.</p>
         </div>
-        <div className="text-xs text-white/40">© 2026 BILL4PE · billforpay.com</div>
+        <div className="text-xs text-white/40">© 2026 BILL4PE · www.bill4pe.com</div>
       </div>
 
       <div className="flex items-center justify-center p-6 bg-white text-navy relative">

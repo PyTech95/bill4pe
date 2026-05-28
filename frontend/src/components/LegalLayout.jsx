@@ -47,7 +47,7 @@ export default function LegalLayout({ title, updatedOn, children }) {
       {/* Footer */}
       <footer className="bg-navy text-white px-5 md:px-8 py-10">
         <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm">
-          <div className="text-white/50">© 2026 BILL4PE · billforpay.com</div>
+          <div className="text-white/50">© 2026 BILL4PE · www.bill4pe.com</div>
           <div className="flex gap-5 text-white/70">
             <Link to="/privacy" className="hover:text-brand">Privacy</Link>
             <Link to="/terms" className="hover:text-brand">Terms</Link>

@@ -1292,7 +1292,7 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
         "Items, prices and merchant details were captured at point of purchase. "
         "For corporate reimbursement, attach this invoice to your expense report.", sub_st))
     story.append(Spacer(1, 8))
-    story.append(Paragraph(f"Generated: {now_iso()[:19]} UTC | BILL4PE © 2026 | billforpay.com", sub_st))
+    story.append(Paragraph(f"Generated: {now_iso()[:19]} UTC | BILL4PE © 2026 | www.bill4pe.com", sub_st))
 
     doc.build(story)
     buf.seek(0)
@@ -1481,7 +1481,7 @@ def build_report_pdf(report: dict, expenses: List[dict], user_name: str) -> byte
         "to its own audit-trail bill (merchant, UPI ID, transaction ID, geo and timestamp). "
         "Attach this report to your reimbursement claim.", sub_st))
     story.append(Spacer(1, 6))
-    story.append(Paragraph(f"Generated: {now_iso()[:19]} UTC | BILL4PE © 2026 | billforpay.com", sub_st))
+    story.append(Paragraph(f"Generated: {now_iso()[:19]} UTC | BILL4PE © 2026 | www.bill4pe.com", sub_st))
 
     doc.build(story)
     buf.seek(0)

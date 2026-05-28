@@ -402,7 +402,7 @@ const Footer = () => (
         </div>
         <p className="mt-6 text-white/50 max-w-md">
           Pay Your Bill — AI Powered Expense & Invoice Platform.
-          Made for India's professionals. <span className="text-brand">billforpay.com</span>
+          Made for India's professionals. <span className="text-brand">www.bill4pe.com</span>
         </p>
       </div>
       <div className="md:col-span-2">

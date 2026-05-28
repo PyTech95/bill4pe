@@ -7,7 +7,7 @@ export default function Terms() {
       <P>
         These Terms of Service ("Terms") govern your access to and use of BILL4PE, an
         AI-powered expense, invoice and reimbursement platform operated under the brand
-        billforpay.com (the "Service"). By creating an account or using the Service, you
+        www.bill4pe.com (the "Service"). By creating an account or using the Service, you
         agree to these Terms.
       </P>
 
@@ -123,7 +123,7 @@ export default function Terms() {
       <P>
         Questions? Use the{' '}
         <a href="/#contact" className="text-brand underline">contact form</a>{' '}
-        on our home page or email <span className="text-brand">legal@billforpay.com</span>.
+        on our home page or email <span className="text-brand">legal@bill4pe.com</span>.
       </P>
     </LegalLayout>
   );
