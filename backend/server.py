@@ -457,6 +457,93 @@ Detect each line item. Return ONLY a strict JSON array of {"name": str, "quantit
 No markdown, no prose, no code fences. If nothing detectable, return []."""
 
 
+GROCERY_PROMPT = """You are an Indian grocery shopping assistant. Look at the photo (could be a kirana store basket, supermarket cart, kitchen counter of bought groceries, or assorted packaged products).
+
+Detect every distinct grocery item visible. For each, return:
+- "name": specific Indian grocery item name. Include brand + pack size when readable. Examples:
+    "Aashirvaad Atta 5kg" / "Atta 1kg"
+    "Basmati Rice 5kg" / "Sona Masoori Rice 1kg"
+    "Toor Dal 1kg" / "Moong Dal 500g" / "Chana Dal 1kg"
+    "Fortune Sunflower Oil 1L" / "Mustard Oil 1L"
+    "Tata Salt 1kg" / "Sugar 1kg"
+    "Amul Butter 100g" / "Amul Cheese Slice"
+    "Aashirvaad Sugar 1kg" / "Madhusudan Ghee 500g"
+    "Onion 1kg" / "Tomato 1kg" / "Potato 2kg" / "Banana 1 dozen"
+    "Parle-G 50g" / "Britannia Bourbon" / "Maggi 70g x 4"
+    "Surf Excel 1kg" / "Vim Bar 200g" (count as grocery if mixed with food items)
+- "quantity": realistic count of that exact pack visible (e.g. 2 packs of Atta = quantity 2)
+- "unit_price": typical INR retail price PER PACK at an Indian supermarket
+    Atta 5kg ~275, Atta 1kg ~50, Basmati Rice 5kg ~600, Sona Masoori 1kg ~70
+    Toor Dal 1kg ~140, Moong Dal 1kg ~130, Sugar 1kg ~45
+    Sunflower Oil 1L ~150, Mustard Oil 1L ~180, Salt 1kg ~22
+    Amul Butter 100g ~58, Maggi 70g ~14, Parle-G 50g ~10
+    Onion ~30/kg, Tomato ~40/kg, Potato ~30/kg
+
+Return ONLY a strict JSON array. No markdown, no prose, no code fences. Example:
+[{"name":"Aashirvaad Atta 5kg","quantity":1,"unit_price":275},{"name":"Toor Dal 1kg","quantity":2,"unit_price":140},{"name":"Tata Salt 1kg","quantity":1,"unit_price":22}]
+
+If nothing grocery-like is visible, return []."""
+
+
+PANTRY_PROMPT = """You are an office pantry / break-room expense assistant. Look at the photo of office snacks, beverages, and pantry supplies.
+
+Detect every distinct item visible. For each, return:
+- "name": specific item with brand & pack when readable. Examples:
+    "Nescafé Classic 50g" / "Bru Instant Coffee 100g" / "Tata Tea Premium 250g"
+    "Amul Tetra Pack Milk 1L" / "Mother Dairy Toned Milk 500ml"
+    "Sugar 1kg" / "Sugar Sachet x 100"
+    "Britannia Marie Gold" / "Parle-G 250g" / "Oreo 120g"
+    "Lays Magic Masala 90g" / "Kurkure Masala Munch 80g" / "Haldiram Bhujia 200g"
+    "Aquafina 1L Water" / "Bisleri 2L" / "Coca-Cola 750ml"
+    "Real Mixed Fruit Juice 1L" / "Tropicana 200ml"
+    "Cake / Pastry" / "Sandwich" / "Samosa" / "Vada Pav"
+    "Paper Cups x 100" / "Plastic Spoons x 50" (count if part of pantry restock)
+- "quantity": realistic count of that pack visible
+- "unit_price": typical INR retail price PER PACK
+    Nescafé 50g ~155, Bru 100g ~200, Tata Tea 250g ~120, Amul Milk 1L ~70
+    Britannia Marie ~30, Parle-G 250g ~50, Lays 90g ~30, Kurkure 80g ~20
+    Bisleri 1L ~20, Coca-Cola 750ml ~40, Real Juice 1L ~110
+    Samosa ~15, Vada Pav ~25, Pastry ~80
+
+Return ONLY a strict JSON array. No markdown, no prose, no code fences. Example:
+[{"name":"Nescafé Classic 50g","quantity":2,"unit_price":155},{"name":"Britannia Marie Gold","quantity":3,"unit_price":30},{"name":"Bisleri 1L","quantity":12,"unit_price":20}]
+
+If nothing pantry-related is visible, return []."""
+
+
+STATIONERY_PROMPT = """You are an office stationery expense assistant. Look at the photo of office supplies.
+
+Detect every distinct stationery item visible. For each, return:
+- "name": specific item with brand & pack when readable. Examples:
+    "Reynolds 045 Blue Pen" / "Cello Butterflow Pen" / "Parker Vector"
+    "A4 Sheets 500 sheets" / "Notebook 200 pages" / "Sticky Notes 100 sheets"
+    "Stapler" / "Staple Pins box" / "Paper Clips box"
+    "Highlighter Set 4" / "Permanent Marker" / "White Board Marker"
+    "File Folder" / "Box File" / "Punching Machine"
+    "Calculator Casio" / "Scissors" / "Ruler 30cm"
+    "Printer Cartridge HP 802" / "Toner"
+- "quantity": realistic count visible
+- "unit_price": typical INR retail price
+    Pen ~10-100, A4 ream ~300, Notebook ~80-150, Stapler ~80
+    Marker ~40, Highlighter ~30, Sticky note ~50, File ~25
+    Cartridge ~750, Calculator ~250
+
+Return ONLY a strict JSON array. No markdown, no prose, no code fences. If nothing stationery-related, return []."""
+
+
+def _category_prompt(category: str) -> str:
+    c = (category or "").lower().strip()
+    if c == "food":
+        return FOOD_PROMPT
+    if c == "grocery":
+        return GROCERY_PROMPT
+    if c == "pantry":
+        return PANTRY_PROMPT
+    if c == "stationery":
+        return STATIONERY_PROMPT
+    return GENERIC_PROMPT
+
+
 RECEIPT_PROMPT = """You are an expert OCR receipt parser for Indian printed bills (Swiggy / Zomato / BigBazaar / DMart / Reliance Fresh / restaurants / pharmacies / grocery stores / petrol pumps).
 
 Carefully read the receipt photo. Extract:
@@ -490,7 +577,7 @@ async def detect_items(category: str = "food", file: UploadFile = File(...), use
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     tmp.write(raw); tmp.flush(); tmp.close()
     try:
-        prompt = FOOD_PROMPT if category.lower() == "food" else GENERIC_PROMPT
+        prompt = _category_prompt(category)
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"detect-{uuid.uuid4()}",

@@ -23,6 +23,23 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-28 (Grocery / Pantry / Stationery specialised AI)
+- **Category-aware AI image prompts** added in backend:
+  - **GROCERY_PROMPT**: detects Aashirvaad Atta, Toor Dal, Tata Salt, Sunflower Oil, Parle-G etc. with brand + pack size + realistic INR retail prices
+  - **PANTRY_PROMPT**: detects Nescafé, Bru, Tata Tea, Britannia Marie Gold, Bisleri, Lays etc. — office break-room SKUs
+  - **STATIONERY_PROMPT**: detects pens, notebooks, A4 reams, markers, file folders, printer cartridges
+  - `_category_prompt()` helper routes correctly per category
+- **Frontend AI hero copy is now category-aware** via `AI_COPY` map in SubCategory.jsx — title, accent items list, and CTA all change per category (e.g. "Snap your grocery haul" / "Capture grocery items" / "Atta, Rice, Dal, Oil, Spices, Sugar")
+- **Sub-category lists upgraded** in categories.js with richer, more useful options:
+  - Grocery: Atta/Rice/Dal, Oil/Ghee/Spices, Vegetables/Fruits, Dairy/Eggs, Snacks/Beverages, Household/Cleaning, Daily Top-up, Weekly Bulk
+  - Pantry: Tea & Coffee, Snacks & Biscuits, Beverages & Water, Milk & Dairy, Sugar & Sweetener, Disposables
+  - Stationery: Office Supplies, Printing, Notebooks, Pens & Markers, Files & Folders, Printer Cartridge
+  - Gift: Client Gift, Employee Reward, Festive Hamper, Anniversary, Birthday
+  - Flower: Bouquet, Decoration, Plants, Garlands
+  - Cleaning: Housekeeping Service, Cleaning Supplies, Pest Control, Laundry
+  - Other: Misc, Repairs & Maintenance, Subscriptions, Internet & Phone, Courier
+- Verified end-to-end with synthetic grocery + pantry images: 6/6 items correctly detected with brand names + pack sizes + accurate INR prices for both categories.
+
 ## What's Been Implemented — 2026-05-28 (Hotel category redesigned)
 - **Dedicated HotelSubCategory page** (separate route `/app/category/hotel`):
   - Sub-categories now Room Types: **Standard Room (default)**, Deluxe Room, Suite, Family Room, Dormitory, Other

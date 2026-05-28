@@ -17,6 +17,18 @@ import api from '@/lib/api';
 
 const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
 
+// Per-category AI hero copy (action + items detected)
+const AI_COPY = {
+  food:       { title: (s,c) => `Snap your ${(s || c.label).toLowerCase()} photo`, items: 'Dal, Roti, Sabji, Rice', cta: 'food photo' },
+  grocery:    { title: () => 'Snap your grocery haul',           items: 'Atta, Rice, Dal, Oil, Spices, Sugar', cta: 'grocery items' },
+  pantry:     { title: () => 'Snap the pantry shelf',            items: 'Tea, Coffee, Biscuits, Snacks, Bottled water', cta: 'pantry items' },
+  stationery: { title: () => 'Snap the office supplies',         items: 'Pens, Notebooks, A4 sheets, Markers, Files', cta: 'stationery' },
+  gift:       { title: () => 'Snap the gift items',              items: 'Chocolates, Hamper boxes, Wrapping, Cards', cta: 'gift items' },
+  flower:     { title: () => 'Snap the bouquet / arrangement',   items: 'Roses, Lilies, Carnations, Decor', cta: 'flower items' },
+  cleaning:   { title: () => 'Snap the cleaning supplies',       items: 'Surf Excel, Lizol, Phenyl, Wipes', cta: 'cleaning items' },
+  other:      { title: (s,c) => `Snap the ${(s || c.label).toLowerCase()} items`, items: 'all visible products with quantity & price', cta: 'items' },
+};
+
 // Auto-pick food meal based on current hour.
 // 5–11 → Breakfast, 11–16 → Lunch, 16–20 → Snacks, else → Dinner.
 const foodMealByHour = (h) => {
@@ -259,10 +271,10 @@ export default function SubCategory() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display text-xl font-bold leading-tight">
-                Snap your {(serviceType || c.label).toLowerCase()} photo
+                {(AI_COPY[cat] || AI_COPY.other).title(serviceType, c)}
               </div>
               <div className="text-xs text-white/60 mt-1.5 leading-relaxed">
-                AI detects <span className="text-lime font-semibold">Dal, Roti, Sabji, Rice</span> & estimates
+                AI detects <span className="text-lime font-semibold">{(AI_COPY[cat] || AI_COPY.other).items}</span> & estimates
                 quantities + prices — bill auto-fills in seconds.
               </div>
             </div>
@@ -270,7 +282,7 @@ export default function SubCategory() {
 
           <div className="mt-4 flex items-center gap-2">
             <div className="flex-1 inline-flex items-center justify-center gap-2 h-11 bg-brand hover:bg-[#1858CC] rounded-full text-white font-semibold text-sm transition-colors">
-              <Camera className="w-4 h-4" /> Capture {(serviceType || c.label)} photo
+              <Camera className="w-4 h-4" /> Capture {(AI_COPY[cat] || AI_COPY.other).cta}
             </div>
           </div>
 
