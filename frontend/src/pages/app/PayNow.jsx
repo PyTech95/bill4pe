@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
-import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, Camera, AlertCircle, KeyRound } from 'lucide-react';
+import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, Camera, AlertCircle, KeyRound, ExternalLink, Copy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -18,6 +18,26 @@ const parseUpi = (data) => {
   } catch { return { upi: '', name: '', amt: '' }; }
 };
 
+// Detect in-app webviews (WhatsApp/Instagram/Facebook/Twitter etc.) which on iOS block getUserMedia silently.
+const detectInAppBrowser = () => {
+  if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '' };
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  let name = '';
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) name = 'Facebook';
+  else if (/Instagram/i.test(ua)) name = 'Instagram';
+  else if (/Twitter/i.test(ua)) name = 'Twitter / X';
+  else if (/Line\//i.test(ua)) name = 'LINE';
+  else if (/MicroMessenger/i.test(ua)) name = 'WeChat';
+  // WhatsApp on iOS leaves no obvious UA token; flag iOS WKWebView (no Safari token) as suspect
+  const isIosSuspectWebView = isIOS && !/Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
+  if (!name && isIosSuspectWebView) name = 'WhatsApp / In-app browser';
+  // Android WhatsApp UA contains "wv" (WebView)
+  if (!name && isAndroid && /; wv\)/i.test(ua)) name = 'In-app browser';
+  return { isInApp: !!name, isIOS, isAndroid, name };
+};
+
 export default function PayNow() {
   const nav = useNavigate();
   const { refreshUser } = useAuth();
@@ -27,10 +47,12 @@ export default function PayNow() {
   const [geo, setGeo] = useState({ lat: null, lng: null });
   const [cameras, setCameras] = useState([]);
   const [activeCamIdx, setActiveCamIdx] = useState(0);
-  const [scanStatus, setScanStatus] = useState('starting'); // starting | running | error | denied
+  const [scanStatus, setScanStatus] = useState('starting'); // starting | running | error | denied | inapp
   const [scanError, setScanError] = useState('');
+  const [browserInfo] = useState(() => detectInAppBrowser());
   const scannerRef = useRef(null);
   const startedRef = useRef(false);
+  const probeTimerRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -70,19 +92,39 @@ export default function PayNow() {
     const startScanner = async () => {
       setScanStatus('starting');
       setScanError('');
+
+      // Hard-stop probe after 9s — covers iOS in-app WebViews that never reject getUserMedia
+      probeTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        setScanStatus('inapp');
+        setScanError(
+          browserInfo.isInApp
+            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
+            : 'Camera response nahin de raha. Neeche UPI manually enter kariye.'
+        );
+      }, 9000);
+
       try {
         // Probe permission early: triggers permission prompt and unlocks getCameras()
         if (navigator.mediaDevices?.getUserMedia) {
           const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           probe.getTracks().forEach((t) => t.stop());
+        } else {
+          throw new Error('getUserMedia not supported');
         }
       } catch (err) {
         if (cancelled) return;
+        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
         const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-        setScanStatus(denied ? 'denied' : 'error');
-        setScanError(denied
-          ? 'Camera permission denied. Allow camera access from browser settings, or enter UPI manually.'
-          : `Camera unavailable: ${err?.message || err?.name || 'unknown'}. Enter UPI manually below.`);
+        const isInApp = browserInfo.isInApp;
+        setScanStatus(isInApp ? 'inapp' : (denied ? 'denied' : 'error'));
+        setScanError(
+          isInApp
+            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
+            : denied
+            ? 'Camera permission denied. Allow camera access from browser settings, or enter UPI manually.'
+            : `Camera unavailable: ${err?.message || err?.name || 'unknown'}. Enter UPI manually below.`
+        );
         return;
       }
 
@@ -133,9 +175,11 @@ export default function PayNow() {
           },
           () => { /* ignore per-frame scan misses */ }
         );
+        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
         if (!cancelled) setScanStatus('running');
       } catch (err) {
         if (cancelled) return;
+        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
         setScanStatus('error');
         setScanError(`Camera failed to start: ${err?.message || err?.name || 'unknown error'}. Enter UPI manually.`);
       }
@@ -145,6 +189,7 @@ export default function PayNow() {
 
     return () => {
       cancelled = true;
+      if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
       try {
         if (scannerRef.current) {
           scannerRef.current.stop().catch(() => {}).finally(() => {
@@ -184,7 +229,20 @@ export default function PayNow() {
 
   const skipScan = async () => {
     try { await scannerRef.current?.stop(); } catch { /* ignore */ }
+    if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
     setStage('confirm');
+  };
+
+  const openInExternalBrowser = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard?.writeText(url);
+      toast.success('Link copied — paste it in Safari/Chrome');
+    } catch {
+      toast.info('Copy this link and open in Safari/Chrome');
+    }
+    // Best-effort: try x-safari (works only when not in iOS WKWebView restrictions but harmless)
+    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* ignore */ }
   };
 
   const launchUpiApp = () => {
@@ -249,6 +307,30 @@ export default function PayNow() {
 
       {stage === 'scan' && (
         <div className="mt-5 space-y-4">
+          {browserInfo.isInApp && (
+            <div
+              data-testid="inapp-warning-banner"
+              className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3"
+            >
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-bold text-amber-900">
+                  {browserInfo.name} me camera band rehta hai
+                </div>
+                <div className="text-xs text-amber-800 mt-0.5 leading-snug">
+                  QR scan ke liye Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.
+                </div>
+                <button
+                  onClick={openInExternalBrowser}
+                  data-testid="open-external-btn"
+                  className="press-down mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 underline underline-offset-2"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Copy link &amp; open in Safari
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flat-card p-3 relative">
             <div
               id="qr-reader"
@@ -259,21 +341,32 @@ export default function PayNow() {
 
             {/* Camera status overlays */}
             {scanStatus === 'starting' && (
-              <div className="absolute inset-3 rounded-xl bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-6 pointer-events-none">
+              <div className="absolute inset-3 rounded-xl bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-6">
                 <Loader2 className="w-8 h-8 animate-spin text-lime" />
                 <div className="mt-3 text-xs uppercase tracking-[0.25em] font-bold">Starting camera…</div>
                 <div className="mt-1 text-[11px] text-white/60">Allow camera permission if prompted</div>
+                <button
+                  onClick={skipScan}
+                  data-testid="starting-manual-fallback-btn"
+                  className="press-down mt-4 inline-flex items-center gap-1.5 text-[11px] text-white/80 underline underline-offset-2"
+                >
+                  <KeyRound className="w-3 h-3" /> Camera not opening? Enter UPI manually
+                </button>
               </div>
             )}
-            {(scanStatus === 'error' || scanStatus === 'denied') && (
+            {(scanStatus === 'error' || scanStatus === 'denied' || scanStatus === 'inapp') && (
               <div className="absolute inset-3 rounded-xl bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-5 py-4">
                 <div className="w-12 h-12 rounded-full bg-red-500/15 grid place-items-center">
                   <AlertCircle className="w-6 h-6 text-red-400" />
                 </div>
                 <div className="mt-3 text-sm font-bold">
-                  {scanStatus === 'denied' ? 'Camera permission needed' : 'Camera unavailable'}
+                  {scanStatus === 'denied'
+                    ? 'Camera permission needed'
+                    : scanStatus === 'inapp'
+                    ? `Camera blocked in ${browserInfo.name || 'in-app browser'}`
+                    : 'Camera unavailable'}
                 </div>
-                <div className="mt-1 text-[11px] text-white/60 leading-snug max-w-[260px]">
+                <div className="mt-1 text-[11px] text-white/70 leading-snug max-w-[280px]">
                   {scanError || 'Tap below to enter the merchant UPI ID manually.'}
                 </div>
                 <button
@@ -283,6 +376,15 @@ export default function PayNow() {
                 >
                   <KeyRound className="w-4 h-4" /> Enter UPI Manually
                 </button>
+                {scanStatus === 'inapp' && (
+                  <button
+                    onClick={openInExternalBrowser}
+                    data-testid="overlay-open-external-btn"
+                    className="press-down mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/70 underline underline-offset-2"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Open in Safari/Chrome
+                  </button>
+                )}
               </div>
             )}
 

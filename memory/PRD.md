@@ -23,6 +23,14 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+
+## What's Been Implemented — 2026-02-28 (PayNow in-app browser detection)
+- Detect WhatsApp / Instagram / Facebook / iOS WKWebView in PayNow.jsx and show amber warning banner immediately on entry.
+- 9-second hard timeout on `getUserMedia` probe — if camera never responds (typical iOS WhatsApp behaviour), auto-switch to `inapp` status with overlay + "Enter UPI Manually" CTA.
+- "Copy link & open in Safari" button — copies current URL so user can paste in real browser.
+- "Camera not opening?" inline link visible during "Starting camera…" state (no longer blocks pointer events).
+- Eliminates infinite "STARTING CAMERA…" spinner reported when app is opened from WhatsApp link on iPhone.
+
 ## What's Been Implemented — 2026-05-28 (Grocery / Pantry / Stationery specialised AI)
 - **Category-aware AI image prompts** added in backend:
   - **GROCERY_PROMPT**: detects Aashirvaad Atta, Toor Dal, Tata Salt, Sunflower Oil, Parle-G etc. with brand + pack size + realistic INR retail prices
