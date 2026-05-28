@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Html5Qrcode } from 'html5-qrcode';
-import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, Camera, AlertCircle, ExternalLink, Copy } from 'lucide-react';
+import jsQR from 'jsqr';
+import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, AlertCircle, ExternalLink, Copy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -9,7 +9,6 @@ import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const parseUpi = (data) => {
-  // upi://pay?pa=xxx@bank&pn=Name&am=10&...
   try {
     if (!data?.toLowerCase().startsWith('upi://')) return { upi: '', name: '', amt: '' };
     const q = data.split('?')[1] || '';
@@ -18,7 +17,7 @@ const parseUpi = (data) => {
   } catch { return { upi: '', name: '', amt: '' }; }
 };
 
-// Detect in-app webviews (WhatsApp/Instagram/Facebook/Twitter etc.) which on iOS block getUserMedia silently.
+// Detect in-app webviews that silently block getUserMedia on iOS
 const detectInAppBrowser = () => {
   if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '' };
   const ua = navigator.userAgent || '';
@@ -30,10 +29,8 @@ const detectInAppBrowser = () => {
   else if (/Twitter/i.test(ua)) name = 'Twitter / X';
   else if (/Line\//i.test(ua)) name = 'LINE';
   else if (/MicroMessenger/i.test(ua)) name = 'WeChat';
-  // WhatsApp on iOS leaves no obvious UA token; flag iOS WKWebView (no Safari token) as suspect
   const isIosSuspectWebView = isIOS && !/Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
   if (!name && isIosSuspectWebView) name = 'WhatsApp / In-app browser';
-  // Android WhatsApp UA contains "wv" (WebView)
   if (!name && isAndroid && /; wv\)/i.test(ua)) name = 'In-app browser';
   return { isInApp: !!name, isIOS, isAndroid, name };
 };
@@ -42,24 +39,30 @@ export default function PayNow() {
   const nav = useNavigate();
   const { refreshUser } = useAuth();
   const [draft, setDraft] = useState(null);
-  const [stage, setStage] = useState('scan'); // scan | confirm | submitting
+  const [stage, setStage] = useState('scan');
   const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '', txnId: '', method: 'UPI' });
   const [geo, setGeo] = useState({ lat: null, lng: null });
-  const [cameras, setCameras] = useState([]);
-  const [activeCamIdx, setActiveCamIdx] = useState(0);
   const [scanStatus, setScanStatus] = useState('starting'); // starting | running | error | denied | inapp
   const [scanError, setScanError] = useState('');
   const [browserInfo] = useState(() => detectInAppBrowser());
-  const scannerRef = useRef(null);
-  const startedRef = useRef(false);
-  const probeTimerRef = useRef(null);
+  const [cameraList, setCameraList] = useState([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState(null);
+  const [useFrontCamera, setUseFrontCamera] = useState(false);
 
+  // Native camera refs
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const decodedRef = useRef(false);
+  const startTokenRef = useRef(0);
+
+  // Load draft + geolocation
   useEffect(() => {
     try {
       const d = JSON.parse(sessionStorage.getItem('bill4pe_draft') || 'null');
       if (!d) { nav('/app'); return; }
       setDraft(d);
-      // Pre-fill merchant for quick-pay flow
       if (d.prefill_merchant) {
         setMerchant((m) => ({
           ...m,
@@ -73,213 +76,205 @@ export default function PayNow() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        () => { /* user denied — non-blocking */ }
+        () => { /* non-blocking */ }
       );
     }
   }, [nav]);
 
   const total = (draft?.items || []).reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
-  // Robust camera lifecycle: enumerate → pick back camera → start
-  useEffect(() => {
-    if (stage !== 'scan' || startedRef.current) return;
-    const el = document.getElementById('qr-reader');
-    if (!el) return;
-    startedRef.current = true;
-    let cancelled = false;
-    let q = null;
+  // Stop camera + cancel rAF loop
+  const stopCamera = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (streamRef.current) {
+      try { streamRef.current.getTracks().forEach((t) => t.stop()); } catch { /* */ }
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      try { videoRef.current.srcObject = null; } catch { /* */ }
+    }
+  }, []);
 
-    const startScanner = async () => {
-      setScanStatus('starting');
-      setScanError('');
-
-      // Quick device check — if no camera APIs available at all (desktop preview, blocked WebView),
-      // skip the long wait and surface manual entry immediately.
-      const hasMediaApi = typeof navigator !== 'undefined'
-        && !!navigator.mediaDevices
-        && typeof navigator.mediaDevices.getUserMedia === 'function';
-      if (!hasMediaApi) {
-        setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
-        setScanError(
-          browserInfo.isInApp
-            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya UPI manually enter kariye.`
-            : 'Is browser/device par camera available nahin hai. UPI manually enter kariye.'
-        );
+  // Decode loop: grabs a frame, runs jsQR, on hit -> confirm stage
+  const startDecodeLoop = useCallback(() => {
+    decodedRef.current = false;
+    const tick = () => {
+      if (decodedRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        rafRef.current = requestAnimationFrame(tick);
         return;
       }
-
-      // Hard-stop watchdog — covers iOS in-app WebViews that never resolve getUserMedia.
-      // 15s gives iOS Safari enough time to show the native permission prompt AND for the
-      // user to tap "Allow". Anything shorter shows a false "camera failed" before the prompt.
-      probeTimerRef.current = setTimeout(() => {
-        if (cancelled) return;
-        // Don't override if scanner already running
-        if (scannerRef.current && typeof scannerRef.current.getState === 'function') {
-          // 2 = SCANNING in Html5Qrcode
-          try { if (scannerRef.current.getState() === 2) return; } catch { /* */ }
-        }
-        setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
-        setScanError(
-          browserInfo.isInApp
-            ? `${browserInfo.name} me camera band rehta hai. Safari/Chrome me link kholiye.`
-            : 'Camera permission allow kariye aur page refresh kariye.'
-        );
-      }, 15000);
-
-      // NOTE: do NOT probe getUserMedia separately on iOS — calling getUserMedia twice
-      // (once to probe, once via Html5Qrcode) makes iOS Safari hang indefinitely because
-      // the camera is not released fast enough. Let Html5Qrcode.start() request permission natively.
-
-      // Attempt 1: start directly with facingMode (no deviceId) — most reliable on iOS Safari
-      const tryStartWithFacingMode = async () => {
-        const inst = new Html5Qrcode('qr-reader', { verbose: false });
-        scannerRef.current = inst;
-        await inst.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: (vw, vh) => {
-              const min = Math.floor(Math.min(vw, vh) * 0.7);
-              return { width: min, height: min };
-            },
-            aspectRatio: 1,
-          },
-          (decoded) => {
-            const parsed = parseUpi(decoded);
-            setMerchant((m) => ({
-              ...m,
-              upi: parsed.upi || decoded.slice(0, 100),
-              name: parsed.name || m.name,
-            }));
-            inst.stop().catch(() => {}).then(() => setStage('confirm'));
-          },
-          () => { /* ignore per-frame scan misses */ }
-        );
-        return inst;
-      };
-
-      // Attempt 2: enumerate then start with deviceId (fallback for browsers where facingMode is unreliable)
-      const tryStartWithEnumeration = async () => {
-        const camList = await Html5Qrcode.getCameras();
-        if (!camList || !camList.length) throw new Error('No camera detected');
-        setCameras(camList);
-        const back = camList.find((c) => /back|rear|environment/i.test(c.label));
-        const idx = back ? camList.indexOf(back) : (camList.length > 1 ? camList.length - 1 : 0);
-        setActiveCamIdx(idx);
-        const inst = new Html5Qrcode('qr-reader', { verbose: false });
-        scannerRef.current = inst;
-        await inst.start(
-          camList[idx].id,
-          {
-            fps: 10,
-            qrbox: (vw, vh) => {
-              const min = Math.floor(Math.min(vw, vh) * 0.7);
-              return { width: min, height: min };
-            },
-            aspectRatio: 1,
-          },
-          (decoded) => {
-            const parsed = parseUpi(decoded);
-            setMerchant((m) => ({
-              ...m,
-              upi: parsed.upi || decoded.slice(0, 100),
-              name: parsed.name || m.name,
-            }));
-            inst.stop().catch(() => {}).then(() => setStage('confirm'));
-          },
-          () => { /* ignore per-frame scan misses */ }
-        );
-        return inst;
-      };
-
-      try {
-        try {
-          q = await tryStartWithFacingMode();
-        } catch (primaryErr) {
-          if (cancelled) return;
-          // Clean up any half-initialised scanner before retrying
-          try { await scannerRef.current?.stop(); } catch { /* ignore */ }
-          scannerRef.current = null;
-          q = await tryStartWithEnumeration();
-        }
-        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-        if (!cancelled) setScanStatus('running');
-      } catch (err) {
-        if (cancelled) return;
-        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || /permission/i.test(err?.message || ''));
-        const isInApp = browserInfo.isInApp;
-        setScanStatus(isInApp ? 'inapp' : (denied ? 'denied' : 'error'));
-        setScanError(
-          isInApp
-            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
-            : denied
-            ? 'Camera permission denied. Browser settings me allow kariye, ya UPI manually enter kariye.'
-            : `Camera failed: ${err?.message || err?.name || 'unknown error'}. Enter UPI manually.`
-        );
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
       }
-    };
-
-    startScanner();
-
-    return () => {
-      cancelled = true;
-      if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
+      // Downscale for speed (max 600px on the long edge)
+      const maxDim = 600;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const cw = Math.floor(w * scale);
+      const ch = Math.floor(h * scale);
+      if (canvas.width !== cw) canvas.width = cw;
+      if (canvas.height !== ch) canvas.height = ch;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, cw, ch);
       try {
-        if (scannerRef.current) {
-          scannerRef.current.stop().catch(() => {}).finally(() => {
-            try { scannerRef.current.clear(); } catch { /* */ }
-            scannerRef.current = null;
-          });
+        const img = ctx.getImageData(0, 0, cw, ch);
+        const result = jsQR(img.data, cw, ch, { inversionAttempts: 'attemptBoth' });
+        if (result && result.data) {
+          decodedRef.current = true;
+          const parsed = parseUpi(result.data);
+          setMerchant((m) => ({
+            ...m,
+            upi: parsed.upi || result.data.slice(0, 100),
+            name: parsed.name || m.name,
+          }));
+          stopCamera();
+          setStage('confirm');
+          toast.success('QR detected!');
+          return;
         }
-      } catch { /* ignore */ }
-      startedRef.current = false;
+      } catch { /* draw security errors etc. — ignore one frame */ }
+      rafRef.current = requestAnimationFrame(tick);
     };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [stopCamera]);
+
+  // Open camera with native getUserMedia + explicit timeout
+  const startCamera = useCallback(async (opts = {}) => {
+    const myToken = ++startTokenRef.current;
+    setScanStatus('starting');
+    setScanError('');
+
+    // Pre-flight: no MediaDevices API at all (older browsers / strict WebViews)
+    const hasMediaApi = typeof navigator !== 'undefined'
+      && !!navigator.mediaDevices
+      && typeof navigator.mediaDevices.getUserMedia === 'function';
+    if (!hasMediaApi) {
+      setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
+      setScanError(
+        browserInfo.isInApp
+          ? `${browserInfo.name} blocks camera. Open in Safari/Chrome.`
+          : 'Camera not available in this browser.'
+      );
+      return;
+    }
+
+    // Build constraints — prefer back camera unless front toggled
+    const facing = opts.useFront ?? useFrontCamera ? 'user' : 'environment';
+    const constraints = opts.deviceId
+      ? { video: { deviceId: { exact: opts.deviceId } }, audio: false }
+      : { video: { facingMode: { ideal: facing } }, audio: false };
+
+    let stream;
+    try {
+      // Race getUserMedia against a 12s timeout — catches the dreaded "hangs forever" bug
+      stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia(constraints),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('CAMERA_TIMEOUT')), 12000)),
+      ]);
+    } catch (err) {
+      if (myToken !== startTokenRef.current) return; // stale
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      const notFound = err && (err.name === 'NotFoundError' || err.name === 'OverconstrainedError');
+      const timedOut = err?.message === 'CAMERA_TIMEOUT';
+      if (browserInfo.isInApp) {
+        setScanStatus('inapp');
+        setScanError(`${browserInfo.name} blocks camera. Tap "Open in Safari/Chrome" below.`);
+      } else if (denied) {
+        setScanStatus('denied');
+        setScanError('Camera permission denied. Allow camera in browser settings and tap Retry.');
+      } else if (notFound) {
+        setScanStatus('error');
+        setScanError('No camera found on this device.');
+      } else if (timedOut) {
+        setScanStatus('error');
+        setScanError('Camera took too long to respond. Tap Retry, or check if another app is using the camera.');
+      } else {
+        setScanStatus('error');
+        setScanError(`Camera error: ${err?.message || err?.name || 'unknown'}. Tap Retry.`);
+      }
+      return;
+    }
+
+    if (myToken !== startTokenRef.current) {
+      // A newer start() invocation supersedes this one — release the stream
+      try { stream.getTracks().forEach((t) => t.stop()); } catch { /* */ }
+      return;
+    }
+
+    streamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) {
+      try { stream.getTracks().forEach((t) => t.stop()); } catch { /* */ }
+      return;
+    }
+    video.srcObject = stream;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.muted = true;
+
+    try {
+      await video.play();
+    } catch (err) {
+      // Autoplay rejected — surface as error so user can tap retry (which is a user gesture)
+      setScanStatus('error');
+      setScanError('Tap "Retry Camera" to grant playback permission.');
+      return;
+    }
+
+    // Track the active device for switch button
+    try {
+      const tracks = stream.getVideoTracks();
+      const settings = tracks[0]?.getSettings?.() || {};
+      if (settings.deviceId) setCurrentDeviceId(settings.deviceId);
+    } catch { /* */ }
+
+    // Enumerate cameras (now that permission has been granted, labels are visible)
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === 'videoinput');
+      setCameraList(cams);
+    } catch { /* */ }
+
+    setScanStatus('running');
+    startDecodeLoop();
+  }, [browserInfo, useFrontCamera, startDecodeLoop]);
+
+  // Trigger camera when stage becomes 'scan'; teardown on leave
+  useEffect(() => {
+    if (stage !== 'scan') return;
+    startCamera();
+    return () => {
+      startTokenRef.current++; // invalidate any pending start
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   const switchCamera = async () => {
-    if (cameras.length < 2 || !scannerRef.current) return;
-    const nextIdx = (activeCamIdx + 1) % cameras.length;
-    try {
-      await scannerRef.current.stop();
-      await scannerRef.current.start(
-        cameras[nextIdx].id,
-        { fps: 10, qrbox: (vw, vh) => { const m = Math.floor(Math.min(vw, vh) * 0.7); return { width: m, height: m }; }, aspectRatio: 1 },
-        (decoded) => {
-          const parsed = parseUpi(decoded);
-          setMerchant((m) => ({
-            ...m,
-            upi: parsed.upi || decoded.slice(0, 100),
-            name: parsed.name || m.name,
-          }));
-          scannerRef.current.stop().catch(() => {}).then(() => setStage('confirm'));
-        },
-        () => { /* */ }
-      );
-      setActiveCamIdx(nextIdx);
-    } catch (err) {
-      toast.error('Could not switch camera');
-    }
+    if (cameraList.length < 2) return;
+    const idx = cameraList.findIndex((c) => c.deviceId === currentDeviceId);
+    const next = cameraList[(idx + 1) % cameraList.length];
+    if (!next) return;
+    stopCamera();
+    await new Promise((r) => setTimeout(r, 100));
+    startCamera({ deviceId: next.deviceId });
   };
 
-  const skipScan = async () => {
-    try { await scannerRef.current?.stop(); } catch { /* ignore */ }
-    if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-    setStage('confirm');
-  };
-
-  const retryCamera = async () => {
-    // Tear down any existing scanner, reset state, then re-trigger the start effect
-    if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-    try { await scannerRef.current?.stop(); } catch { /* */ }
-    try { scannerRef.current?.clear(); } catch { /* */ }
-    scannerRef.current = null;
-    startedRef.current = false;
+  const retryCamera = () => {
+    stopCamera();
     setScanError('');
     setScanStatus('starting');
-    // Force the start effect to re-run by toggling stage off and back
+    setTimeout(() => startCamera(), 60);
+  };
+
+  const skipScan = () => {
+    stopCamera();
     setStage('confirm');
-    setTimeout(() => setStage('scan'), 30);
   };
 
   const openInExternalBrowser = async () => {
@@ -290,8 +285,7 @@ export default function PayNow() {
     } catch {
       toast.info('Copy this link and open in Safari/Chrome');
     }
-    // Best-effort: try x-safari (works only when not in iOS WKWebView restrictions but harmless)
-    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* ignore */ }
+    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* */ }
   };
 
   const buildUpiLink = (scheme = 'upi') => {
@@ -308,7 +302,6 @@ export default function PayNow() {
   const launchUpiApp = (scheme = 'upi') => {
     if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
     const link = buildUpiLink(scheme);
-    // Anchor-click is more reliable on iOS Safari than location.href for custom schemes
     try {
       const a = document.createElement('a');
       a.href = link;
@@ -320,7 +313,6 @@ export default function PayNow() {
     } catch {
       window.location.href = link;
     }
-    // Soft hint after a short delay (in case UPI app didn't open)
     setTimeout(() => {
       toast.info('App nahin khula? Niche se UPI ID copy karke GPay/PhonePe me paste kariye.', { duration: 5000 });
     }, 2200);
@@ -393,7 +385,7 @@ export default function PayNow() {
                   {browserInfo.name} me camera band rehta hai
                 </div>
                 <div className="text-xs text-amber-800 mt-0.5 leading-snug">
-                  QR scan ke liye Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.
+                  QR scan ke liye Safari/Chrome me kholiye.
                 </div>
                 <button
                   onClick={openInExternalBrowser}
@@ -406,77 +398,94 @@ export default function PayNow() {
             </div>
           )}
 
-          {/* Camera viewport */}
+          {/* Camera viewport — native <video> tag for max iOS compatibility */}
           <div className="flat-card p-3 relative">
             <div
-              id="qr-reader"
               className="rounded-xl overflow-hidden bg-black aspect-square relative"
               data-testid="qr-reader"
               style={{ minHeight: '280px' }}
-            />
+            >
+              <video
+                ref={videoRef}
+                data-testid="qr-video"
+                playsInline
+                muted
+                autoPlay
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* hidden canvas used for jsQR frame grabs */}
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-            {/* Camera status overlays */}
-            {scanStatus === 'starting' && (
-              <div className="absolute inset-3 rounded-xl bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-6">
-                <Loader2 className="w-8 h-8 animate-spin text-lime" />
-                <div className="mt-3 text-xs uppercase tracking-[0.25em] font-bold">Starting camera…</div>
-                <div className="mt-2 text-[11px] text-white/70 leading-snug max-w-[240px]">
-                  Browser permission prompt aane par <b className="text-lime">Allow</b> kariye
+              {/* QR target reticle */}
+              {scanStatus === 'running' && (
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                  <div className="w-[70%] aspect-square border-2 border-lime/70 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
                 </div>
-              </div>
-            )}
-            {(scanStatus === 'error' || scanStatus === 'denied' || scanStatus === 'inapp') && (
-              <div className="absolute inset-3 rounded-xl bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-5 py-4">
-                <div className="w-12 h-12 rounded-full bg-red-500/15 grid place-items-center">
-                  <AlertCircle className="w-6 h-6 text-red-400" />
+              )}
+
+              {scanStatus === 'starting' && (
+                <div className="absolute inset-0 rounded-xl bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-6">
+                  <Loader2 className="w-8 h-8 animate-spin text-lime" />
+                  <div className="mt-3 text-xs uppercase tracking-[0.25em] font-bold">Starting camera…</div>
+                  <div className="mt-2 text-[11px] text-white/70 leading-snug max-w-[240px]">
+                    Browser permission prompt aane par <b className="text-lime">Allow</b> kariye
+                  </div>
                 </div>
-                <div className="mt-3 text-sm font-bold">
-                  {scanStatus === 'denied'
-                    ? 'Camera permission needed'
-                    : scanStatus === 'inapp'
-                    ? `Camera blocked in ${browserInfo.name || 'in-app browser'}`
-                    : 'Camera unavailable'}
-                </div>
-                <div className="mt-1 text-[11px] text-white/70 leading-snug max-w-[280px]">
-                  {scanError || 'Allow camera access in your browser settings, then retry.'}
-                </div>
-                <button
-                  onClick={retryCamera}
-                  data-testid="retry-camera-btn"
-                  className="press-down mt-4 inline-flex items-center gap-2 h-11 px-5 bg-lime text-navy rounded-full font-bold text-sm"
-                >
-                  <RefreshCw className="w-4 h-4" /> Retry Camera
-                </button>
-                {scanStatus === 'inapp' && (
+              )}
+
+              {(scanStatus === 'error' || scanStatus === 'denied' || scanStatus === 'inapp') && (
+                <div className="absolute inset-0 rounded-xl bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-5 py-4">
+                  <div className="w-12 h-12 rounded-full bg-red-500/15 grid place-items-center">
+                    <AlertCircle className="w-6 h-6 text-red-400" />
+                  </div>
+                  <div className="mt-3 text-sm font-bold">
+                    {scanStatus === 'denied'
+                      ? 'Camera permission needed'
+                      : scanStatus === 'inapp'
+                      ? `Camera blocked in ${browserInfo.name || 'in-app browser'}`
+                      : 'Camera unavailable'}
+                  </div>
+                  <div className="mt-1 text-[11px] text-white/70 leading-snug max-w-[280px]">
+                    {scanError || 'Allow camera access in your browser settings, then retry.'}
+                  </div>
                   <button
-                    onClick={openInExternalBrowser}
-                    data-testid="overlay-open-external-btn"
-                    className="press-down mt-3 inline-flex items-center gap-1.5 text-[11px] text-white/80 underline underline-offset-2"
+                    onClick={retryCamera}
+                    data-testid="retry-camera-btn"
+                    className="press-down mt-4 inline-flex items-center gap-2 h-11 px-5 bg-lime text-navy rounded-full font-bold text-sm"
                   >
-                    <ExternalLink className="w-3 h-3" /> Open in Safari/Chrome
+                    <RefreshCw className="w-4 h-4" /> Retry Camera
                   </button>
-                )}
-                <button
-                  onClick={skipScan}
-                  data-testid="enter-manually-btn"
-                  className="mt-3 text-[11px] text-white/60 underline underline-offset-2"
-                >
-                  or enter UPI manually
-                </button>
-              </div>
-            )}
+                  {scanStatus === 'inapp' && (
+                    <button
+                      onClick={openInExternalBrowser}
+                      data-testid="overlay-open-external-btn"
+                      className="press-down mt-3 inline-flex items-center gap-1.5 text-[11px] text-white/80 underline underline-offset-2"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Open in Safari/Chrome
+                    </button>
+                  )}
+                  <button
+                    onClick={skipScan}
+                    data-testid="enter-manually-btn"
+                    className="mt-3 text-[11px] text-white/60 underline underline-offset-2"
+                  >
+                    or enter UPI manually
+                  </button>
+                </div>
+              )}
 
-            {/* Camera switch button (when 2+ cams) */}
-            {scanStatus === 'running' && cameras.length > 1 && (
-              <button
-                onClick={switchCamera}
-                data-testid="switch-camera-btn"
-                className="absolute top-5 right-5 z-10 w-10 h-10 grid place-items-center rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25"
-                aria-label="Switch camera"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            )}
+              {/* Camera switch button (when 2+ cams) */}
+              {scanStatus === 'running' && cameraList.length > 1 && (
+                <button
+                  onClick={switchCamera}
+                  data-testid="switch-camera-btn"
+                  className="absolute top-3 right-3 z-10 w-10 h-10 grid place-items-center rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25"
+                  aria-label="Switch camera"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
@@ -503,91 +512,59 @@ export default function PayNow() {
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile (optional)</label>
                 <Input value={merchant.mobile} onChange={(e) => setMerchant({ ...merchant, mobile: e.target.value })}
-                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-mobile-input" placeholder="9999988888" />
+                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-mobile-input" placeholder="+91…" />
               </div>
             </div>
           </div>
 
-          <button
-            onClick={() => launchUpiApp('upi')}
-            data-testid="launch-upi-btn"
-            className="press-down w-full bg-navy text-white rounded-2xl p-4 flex items-center justify-between hover:bg-[#152042]"
-          >
-            <span className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand text-white grid place-items-center">
-                <Smartphone className="w-5 h-5" />
-              </div>
-              <span className="text-left">
-                <div className="font-display font-bold">Open UPI App</div>
-                <div className="text-xs text-white/60">Pay ₹{total.toFixed(2)} via GPay/PhonePe/Paytm</div>
-              </span>
-            </span>
-            <CheckCircle2 className="w-5 h-5 text-brand" />
-          </button>
-
-          {/* App-specific fallbacks + copy UPI for users where upi:// doesn't open the chooser */}
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => launchUpiApp('tez')}
-              data-testid="launch-gpay-btn"
-              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
+          <div className="flat-card p-5 space-y-3">
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Pay this merchant</div>
+            <p className="text-xs text-slate-500 leading-snug">
+              Tap to open your UPI app (GPay / PhonePe / Paytm) with merchant &amp; amount pre-filled. Complete the payment, then come back here.
+            </p>
+            <a
+              href={merchant.upi ? buildUpiLink('upi') : '#'}
+              onClick={(e) => { if (!merchant.upi) { e.preventDefault(); toast.error('Merchant UPI ID required'); } else { launchUpiApp('upi'); } }}
+              data-testid="open-upi-app-btn"
+              className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-lime text-navy text-sm font-bold shadow-sm"
             >
-              GPay
-            </button>
+              <Smartphone className="w-4 h-4" /> Pay ₹{total.toFixed(2)} via UPI App
+            </a>
             <button
-              onClick={() => launchUpiApp('phonepe')}
-              data-testid="launch-phonepe-btn"
-              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
+              onClick={copyUpiId}
+              data-testid="copy-upi-btn"
+              className="press-down w-full inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-white border border-soft text-navy text-sm font-semibold"
             >
-              PhonePe
+              <Copy className="w-4 h-4" /> Copy UPI ID
             </button>
-            <button
-              onClick={() => launchUpiApp('paytmmp')}
-              data-testid="launch-paytm-btn"
-              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
-            >
-              Paytm
-            </button>
-          </div>
-
-          <button
-            onClick={copyUpiId}
-            data-testid="copy-upi-id-btn"
-            className="press-down w-full h-12 rounded-xl bg-lime/15 border-2 border-lime/40 text-navy font-bold text-sm inline-flex items-center justify-center gap-2"
-          >
-            <Copy className="w-4 h-4" />
-            Copy UPI ID — paste in any UPI app
-          </button>
-
-          <div className="flat-card p-5">
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">After paying</div>
-            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mt-3 block">Transaction ID</label>
-            <Input value={merchant.txnId} onChange={(e) => setMerchant({ ...merchant, txnId: e.target.value })}
-                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-txn-input"
-                   placeholder="e.g. T2402151234567890" />
-
-            <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-              <MapPin className="w-3.5 h-3.5" />
-              {geo.lat ? (
-                <span className="font-mono">
-                  {geo.lat.toFixed(4)}, {geo.lng.toFixed(4)} captured
-                </span>
+            <div className="text-[11px] text-slate-400 text-center">
+              {geo.lat && geo.lng ? (
+                <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" /> Location captured</span>
               ) : (
-                <span>Location will be saved if permitted</span>
+                <span>Location not captured</span>
               )}
             </div>
           </div>
 
-          <Button
-            onClick={submit}
-            disabled={stage === 'submitting'}
-            className="press-down w-full h-12 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
-            data-testid="confirm-payment-btn"
-          >
-            {stage === 'submitting' ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-            ) : 'Confirm & Save Expense'}
-          </Button>
+          <div className="flat-card p-5">
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">After paying</div>
+            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UTR / Transaction ID</label>
+            <Input value={merchant.txnId} onChange={(e) => setMerchant({ ...merchant, txnId: e.target.value })}
+                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder="123456789012" />
+            <p className="text-[11px] text-slate-400 mt-1">From your UPI app receipt.</p>
+            <Button
+              data-testid="confirm-payment-btn"
+              onClick={submit}
+              disabled={stage === 'submitting'}
+              className="w-full h-12 mt-4 bg-navy hover:bg-navy/90 text-white rounded-xl font-semibold"
+            >
+              {stage === 'submitting' ? (
+                <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Saving…</span>
+              ) : (
+                <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Confirm payment</span>
+              )}
+            </Button>
+          </div>
         </div>
       )}
     </div>
