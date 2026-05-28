@@ -127,3 +127,33 @@ body {
 
 /* Custom cursor on landing CTA areas */
 .cta-cursor { cursor: pointer; }
+
+/* ===== html5-qrcode camera black-screen fix =====
+   The library injects a <video> + scan region helper; on iOS Safari and some Android browsers
+   the video element renders at 0x0 until forced to fill its parent. */
+#qr-reader { position: relative; }
+#qr-reader video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  background: #000;
+}
+#qr-reader > div { width: 100% !important; height: 100% !important; }
+/* Hide the library's default UI controls — we provide our own skip / switch buttons */
+#qr-reader__dashboard,
+#qr-reader__dashboard_section,
+#qr-reader__status_span,
+#qr-reader__filescan_input,
+#qr-reader__dashboard_section_swaplink,
+#qr-reader__header_message { display: none !important; }
+#qr-reader__scan_region img { display: none !important; }
+#qr-reader__scan_region {
+  background: transparent !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
