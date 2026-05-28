@@ -48,6 +48,7 @@ export default function PayNow() {
   const [cameraList, setCameraList] = useState([]);
   const [currentDeviceId, setCurrentDeviceId] = useState(null);
   const [useFrontCamera, setUseFrontCamera] = useState(false);
+  const [paymentInitiated, setPaymentInitiated] = useState(false);
 
   // Native camera refs
   const videoRef = useRef(null);
@@ -314,6 +315,7 @@ export default function PayNow() {
 
   const launchUpiApp = (scheme = 'upi', path = 'pay') => {
     if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
+    if (!merchant.name?.trim()) { toast.error('Merchant Name required'); return; }
     const link = buildUpiLink(scheme, path);
     try {
       const a = document.createElement('a');
@@ -326,8 +328,9 @@ export default function PayNow() {
     } catch {
       window.location.href = link;
     }
+    setPaymentInitiated(true);
     setTimeout(() => {
-      toast.info('App nahin khula? Niche se UPI ID copy karke apne UPI app me paste kariye.', { duration: 5000 });
+      toast.info('Payment ke baad neeche Transaction ID daaliye.', { duration: 5000 });
     }, 2200);
   };
 
