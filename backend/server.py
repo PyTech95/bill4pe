@@ -25,6 +25,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
 from emergentintegrations.llm.openai import OpenAISpeechToText
@@ -135,6 +138,8 @@ class WalletRecharge(BaseModel):
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    gstin: Optional[str] = None
+    company_name: Optional[str] = None
 
 class PasswordChange(BaseModel):
     current_password: str
@@ -313,6 +318,16 @@ async def update_profile(body: ProfileUpdate, user=Depends(get_current_user)):
         if phone and len(phone) != 10:
             raise HTTPException(400, "Phone must be a 10-digit Indian number")
         patch["phone"] = f"+91{phone}" if phone else None
+    if body.gstin is not None:
+        gstin = (body.gstin or "").strip().upper()
+        if gstin:
+            # GSTIN format: 15 chars - 2 state + 10 PAN + 1 entity + 1 Z + 1 check
+            import re as _re
+            if not _re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$", gstin):
+                raise HTTPException(400, "Invalid GSTIN format (must be 15 chars, e.g. 27ABCDE1234F1Z5)")
+        patch["gstin"] = gstin or None
+    if body.company_name is not None:
+        patch["company_name"] = (body.company_name or "").strip() or None
     if patch:
         await db.users.update_one({"id": user["id"]}, {"$set": patch})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
@@ -1072,7 +1087,10 @@ async def recharge(body: WalletRecharge, user=Depends(get_current_user)):
 
 
 # =================== Bill Generation ===================
-def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
+def build_pdf_bytes(expense: dict, user: dict) -> bytes:
+    user_name = (user or {}).get("name", "Customer")
+    user_gstin = (user or {}).get("gstin")
+    user_company = (user or {}).get("company_name") or (user or {}).get("corporate_name")
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
                             leftMargin=18 * mm, rightMargin=18 * mm)
@@ -1092,22 +1110,35 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
                              fontSize=10, leading=14, textColor=colors.black)
 
     story = []
-    # Header
+    # Build a QR for bill authenticity verification
+    bill_id_str = expense.get('bill_id') or expense['id'][:8].upper()
+    verify_url = f"https://www.bill4pe.com/verify/{bill_id_str}"
+    qr_widget = QrCodeWidget(verify_url, barLevel='M')
+    qr_bounds = qr_widget.getBounds()
+    qr_w = qr_bounds[2] - qr_bounds[0]
+    qr_h = qr_bounds[3] - qr_bounds[1]
+    qr_size = 22 * mm
+    qr_drawing = Drawing(qr_size, qr_size, transform=[qr_size / qr_w, 0, 0, qr_size / qr_h, 0, 0])
+    qr_drawing.add(qr_widget)
+
+    # Header with QR on the right
     header_tbl = Table([
         [Paragraph("<b>BILL4PE</b>", title_st),
          Paragraph(f"<b>OFFICIAL INVOICE</b><br/>"
-                   f"Bill ID: {expense.get('bill_id') or expense['id'][:8].upper()}<br/>"
-                   f"Date: {expense['created_at'][:10]}", sub_st)],
-    ], colWidths=[90 * mm, 90 * mm])
+                   f"Bill ID: {bill_id_str}<br/>"
+                   f"Date: {expense['created_at'][:10]}", sub_st),
+         qr_drawing],
+    ], colWidths=[70 * mm, 85 * mm, 25 * mm])
     header_tbl.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
         ("LINEBELOW", (0, 0), (-1, -1), 2, NAVY),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
     story.append(header_tbl)
     story.append(Spacer(1, 6))
-    story.append(Paragraph("Pay Your Bill — AI Powered Expense & Invoice Platform", sub_st))
+    story.append(Paragraph("Pay Your Bill — AI Powered Expense & Invoice Platform · Scan QR to verify authenticity", sub_st))
     story.append(Spacer(1, 14))
 
     pay = expense.get("payment", {}) or {}
@@ -1152,6 +1183,10 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
     # Customer
     story.append(Paragraph("BILLED TO", h2_st))
     story.append(Paragraph(f"<b>{user_name}</b>", body_st))
+    if user_company:
+        story.append(Paragraph(user_company, sub_st))
+    if user_gstin:
+        story.append(Paragraph(f"<b>GSTIN:</b> {user_gstin}", sub_st))
     story.append(Paragraph(f"Expense Category: {expense.get('category')}"
                            f"{' / ' + expense['sub_category'] if expense.get('sub_category') else ''}", sub_st))
     story.append(Spacer(1, 12))
@@ -1373,7 +1408,7 @@ async def get_bill_pdf(eid: str, token: Optional[str] = None, creds: HTTPAuthori
     if not exp:
         raise HTTPException(404, "Expense not found")
     user = await db.users.find_one({"id": uid}, {"_id": 0})
-    pdf_bytes = build_pdf_bytes(exp, user.get("name", "Customer"))
+    pdf_bytes = build_pdf_bytes(exp, user)
     fname = f"{exp.get('bill_id') or 'bill'}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
