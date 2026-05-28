@@ -245,8 +245,7 @@ export default function PayNow() {
     try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* ignore */ }
   };
 
-  const launchUpiApp = () => {
-    if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
+  const buildUpiLink = (scheme = 'upi') => {
     const params = new URLSearchParams({
       pa: merchant.upi,
       pn: merchant.name || 'Merchant',
@@ -254,11 +253,38 @@ export default function PayNow() {
       cu: 'INR',
       tn: 'BILL4PE Expense',
     });
-    const link = `upi://pay?${params.toString()}`;
-    window.location.href = link;
+    return `${scheme}://pay?${params.toString()}`;
+  };
+
+  const launchUpiApp = (scheme = 'upi') => {
+    if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
+    const link = buildUpiLink(scheme);
+    // Anchor-click is more reliable on iOS Safari than location.href for custom schemes
+    try {
+      const a = document.createElement('a');
+      a.href = link;
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { try { document.body.removeChild(a); } catch { /* */ } }, 200);
+    } catch {
+      window.location.href = link;
+    }
+    // Soft hint after a short delay (in case UPI app didn't open)
     setTimeout(() => {
-      toast.info('Returning from UPI app? Enter the Transaction ID below.');
-    }, 1500);
+      toast.info('App nahin khula? Niche se UPI ID copy karke GPay/PhonePe me paste kariye.', { duration: 5000 });
+    }, 2200);
+  };
+
+  const copyUpiId = async () => {
+    if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
+    try {
+      await navigator.clipboard.writeText(merchant.upi);
+      toast.success(`UPI ID copied: ${merchant.upi}`);
+    } catch {
+      toast.info(`UPI ID: ${merchant.upi}`);
+    }
   };
 
   const submit = async () => {
@@ -438,7 +464,7 @@ export default function PayNow() {
           </div>
 
           <button
-            onClick={launchUpiApp}
+            onClick={() => launchUpiApp('upi')}
             data-testid="launch-upi-btn"
             className="press-down w-full bg-navy text-white rounded-2xl p-4 flex items-center justify-between hover:bg-[#152042]"
           >
@@ -446,12 +472,46 @@ export default function PayNow() {
               <div className="w-10 h-10 rounded-xl bg-brand text-white grid place-items-center">
                 <Smartphone className="w-5 h-5" />
               </div>
-              <span>
+              <span className="text-left">
                 <div className="font-display font-bold">Open UPI App</div>
                 <div className="text-xs text-white/60">Pay ₹{total.toFixed(2)} via GPay/PhonePe/Paytm</div>
               </span>
             </span>
             <CheckCircle2 className="w-5 h-5 text-brand" />
+          </button>
+
+          {/* App-specific fallbacks + copy UPI for users where upi:// doesn't open the chooser */}
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => launchUpiApp('tez')}
+              data-testid="launch-gpay-btn"
+              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
+            >
+              GPay
+            </button>
+            <button
+              onClick={() => launchUpiApp('phonepe')}
+              data-testid="launch-phonepe-btn"
+              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
+            >
+              PhonePe
+            </button>
+            <button
+              onClick={() => launchUpiApp('paytmmp')}
+              data-testid="launch-paytm-btn"
+              className="press-down h-11 rounded-xl bg-white border-2 border-soft text-navy text-xs font-bold"
+            >
+              Paytm
+            </button>
+          </div>
+
+          <button
+            onClick={copyUpiId}
+            data-testid="copy-upi-id-btn"
+            className="press-down w-full h-12 rounded-xl bg-lime/15 border-2 border-lime/40 text-navy font-bold text-sm inline-flex items-center justify-center gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            Copy UPI ID — paste in any UPI app
           </button>
 
           <div className="flat-card p-5">
