@@ -93,68 +93,32 @@ export default function PayNow() {
       setScanStatus('starting');
       setScanError('');
 
-      // Hard-stop probe after 9s — covers iOS in-app WebViews that never reject getUserMedia
+      // Hard-stop watchdog — covers iOS in-app WebViews that never resolve getUserMedia
       probeTimerRef.current = setTimeout(() => {
         if (cancelled) return;
-        setScanStatus('inapp');
+        // Don't override if scanner already running
+        if (scannerRef.current && typeof scannerRef.current.getState === 'function') {
+          // 2 = SCANNING in Html5Qrcode
+          try { if (scannerRef.current.getState() === 2) return; } catch { /* */ }
+        }
+        setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
         setScanError(
           browserInfo.isInApp
             ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
             : 'Camera response nahin de raha. Neeche UPI manually enter kariye.'
         );
-      }, 9000);
+      }, 12000);
 
-      try {
-        // Probe permission early: triggers permission prompt and unlocks getCameras()
-        if (navigator.mediaDevices?.getUserMedia) {
-          const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          probe.getTracks().forEach((t) => t.stop());
-        } else {
-          throw new Error('getUserMedia not supported');
-        }
-      } catch (err) {
-        if (cancelled) return;
-        if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-        const isInApp = browserInfo.isInApp;
-        setScanStatus(isInApp ? 'inapp' : (denied ? 'denied' : 'error'));
-        setScanError(
-          isInApp
-            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
-            : denied
-            ? 'Camera permission denied. Allow camera access from browser settings, or enter UPI manually.'
-            : `Camera unavailable: ${err?.message || err?.name || 'unknown'}. Enter UPI manually below.`
-        );
-        return;
-      }
+      // NOTE: do NOT probe getUserMedia separately on iOS — calling getUserMedia twice
+      // (once to probe, once via Html5Qrcode) makes iOS Safari hang indefinitely because
+      // the camera is not released fast enough. Let Html5Qrcode.start() request permission natively.
 
-      let camList = [];
-      try {
-        camList = await Html5Qrcode.getCameras();
-      } catch (err) {
-        if (cancelled) return;
-        setScanStatus('error');
-        setScanError('Could not access cameras. Enter UPI manually.');
-        return;
-      }
-      if (!camList || !camList.length) {
-        setScanStatus('error');
-        setScanError('No camera detected on this device. Enter UPI manually.');
-        return;
-      }
-      if (cancelled) return;
-      setCameras(camList);
-
-      // Prefer a back/environment camera
-      const back = camList.find((c) => /back|rear|environment/i.test(c.label));
-      const idx = back ? camList.indexOf(back) : (camList.length > 1 ? camList.length - 1 : 0);
-      setActiveCamIdx(idx);
-
-      try {
-        q = new Html5Qrcode('qr-reader', { verbose: false });
-        scannerRef.current = q;
-        await q.start(
-          camList[idx].id,
+      // Attempt 1: start directly with facingMode (no deviceId) — most reliable on iOS Safari
+      const tryStartWithFacingMode = async () => {
+        const inst = new Html5Qrcode('qr-reader', { verbose: false });
+        scannerRef.current = inst;
+        await inst.start(
+          { facingMode: 'environment' },
           {
             fps: 10,
             qrbox: (vw, vh) => {
@@ -162,7 +126,6 @@ export default function PayNow() {
               return { width: min, height: min };
             },
             aspectRatio: 1,
-            videoConstraints: { facingMode: 'environment' },
           },
           (decoded) => {
             const parsed = parseUpi(decoded);
@@ -171,17 +134,72 @@ export default function PayNow() {
               upi: parsed.upi || decoded.slice(0, 100),
               name: parsed.name || m.name,
             }));
-            q.stop().catch(() => {}).then(() => setStage('confirm'));
+            inst.stop().catch(() => {}).then(() => setStage('confirm'));
           },
           () => { /* ignore per-frame scan misses */ }
         );
+        return inst;
+      };
+
+      // Attempt 2: enumerate then start with deviceId (fallback for browsers where facingMode is unreliable)
+      const tryStartWithEnumeration = async () => {
+        const camList = await Html5Qrcode.getCameras();
+        if (!camList || !camList.length) throw new Error('No camera detected');
+        setCameras(camList);
+        const back = camList.find((c) => /back|rear|environment/i.test(c.label));
+        const idx = back ? camList.indexOf(back) : (camList.length > 1 ? camList.length - 1 : 0);
+        setActiveCamIdx(idx);
+        const inst = new Html5Qrcode('qr-reader', { verbose: false });
+        scannerRef.current = inst;
+        await inst.start(
+          camList[idx].id,
+          {
+            fps: 10,
+            qrbox: (vw, vh) => {
+              const min = Math.floor(Math.min(vw, vh) * 0.7);
+              return { width: min, height: min };
+            },
+            aspectRatio: 1,
+          },
+          (decoded) => {
+            const parsed = parseUpi(decoded);
+            setMerchant((m) => ({
+              ...m,
+              upi: parsed.upi || decoded.slice(0, 100),
+              name: parsed.name || m.name,
+            }));
+            inst.stop().catch(() => {}).then(() => setStage('confirm'));
+          },
+          () => { /* ignore per-frame scan misses */ }
+        );
+        return inst;
+      };
+
+      try {
+        try {
+          q = await tryStartWithFacingMode();
+        } catch (primaryErr) {
+          if (cancelled) return;
+          // Clean up any half-initialised scanner before retrying
+          try { await scannerRef.current?.stop(); } catch { /* ignore */ }
+          scannerRef.current = null;
+          q = await tryStartWithEnumeration();
+        }
         if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
         if (!cancelled) setScanStatus('running');
       } catch (err) {
         if (cancelled) return;
         if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
-        setScanStatus('error');
-        setScanError(`Camera failed to start: ${err?.message || err?.name || 'unknown error'}. Enter UPI manually.`);
+        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || /permission/i.test(err?.message || ''));
+        const isInApp = browserInfo.isInApp;
+        setScanStatus(isInApp ? 'inapp' : (denied ? 'denied' : 'error'));
+        setScanError(
+          isInApp
+            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
+            : denied
+            ? 'Camera permission denied. Browser settings me allow kariye, ya UPI manually enter kariye.'
+            : `Camera failed: ${err?.message || err?.name || 'unknown error'}. Enter UPI manually.`
+        );
       }
     };
 
