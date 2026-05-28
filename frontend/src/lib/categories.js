@@ -2,7 +2,7 @@ import { UtensilsCrossed, Plane, BedDouble, Pencil, Gift, Coffee, Flower2, Shopp
 
 export const CATEGORIES = [
   { key: 'food', label: 'Food', icon: UtensilsCrossed, sub: ['Breakfast', 'Lunch', 'Dinner', 'Snacks'] },
-  { key: 'travel', label: 'Travel', icon: Plane, sub: ['Flight', 'Train', 'Cab', 'Bus', 'Toll'] },
+  { key: 'travel', label: 'Travel', icon: Plane, sub: ['Auto Booking', 'E-Rickshaw Booking', 'Bike Booking', 'Cab Booking', 'Bus Booking', 'Taxi Booking', 'Self Booking', 'Flight', 'Train', 'Toll'] },
   { key: 'hotel', label: 'Hotel', icon: BedDouble, sub: ['Lodging', 'Meals', 'Conference'] },
   { key: 'stationery', label: 'Stationery', icon: Pencil, sub: ['Office', 'Printing', 'Supplies'] },
   { key: 'gift', label: 'Gift', icon: Gift, sub: ['Client', 'Employee', 'Festive'] },

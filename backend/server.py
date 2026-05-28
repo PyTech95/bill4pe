@@ -88,6 +88,15 @@ class ExpenseDraft(BaseModel):
     items: List[ItemIn]
     notes: Optional[str] = None
 
+class TripInfo(BaseModel):
+    from_text: Optional[str] = None
+    to_text: Optional[str] = None
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
+    drop_lat: Optional[float] = None
+    drop_lng: Optional[float] = None
+    nature_of_business: Optional[str] = None  # e.g. "Auto Driver"
+
 class PaymentInfo(BaseModel):
     merchant_name: Optional[str] = None
     merchant_upi: Optional[str] = None
@@ -97,6 +106,7 @@ class PaymentInfo(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     payment_method: str = "UPI"  # GPay/PhonePe/Paytm/BharatPe/BHIM
+    trip: Optional[TripInfo] = None
 
 class ExpenseCreate(BaseModel):
     category: str
@@ -1008,10 +1018,14 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
     story.append(Spacer(1, 14))
 
     pay = expense.get("payment", {}) or {}
+    trip = pay.get("trip") or None
     # Merchant info
     cat_label = (expense.get("category") or "").title() or "—"
     sub_label = expense.get("sub_category") or ""
-    nature = f"{cat_label}{' / ' + sub_label if sub_label else ''}"
+    # Prefer trip.nature_of_business when present (e.g. "Auto Driver")
+    nature = (trip or {}).get("nature_of_business") if trip else None
+    if not nature:
+        nature = f"{cat_label}{' / ' + sub_label if sub_label else ''}"
     story.append(Paragraph("MERCHANT DETAILS", h2_st))
     m_tbl = Table([
         ["Merchant Name", pay.get("merchant_name") or "—"],
@@ -1072,6 +1086,61 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
     ]))
     story.append(items_tbl)
     story.append(Spacer(1, 12))
+
+    # Trip details (only for travel category)
+    if trip and (trip.get("from_text") or trip.get("to_text") or trip.get("pickup_lat") is not None):
+        story.append(Paragraph("TRIP DETAILS", h2_st))
+        trip_tbl = Table([
+            ["From", trip.get("from_text") or "—"],
+            ["To", trip.get("to_text") or "—"],
+            ["Amount", f"₹ {float(expense.get('total', 0)):.2f}"],
+        ], colWidths=[45 * mm, 135 * mm])
+        trip_tbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#64748B")),
+            ("BACKGROUND", (0, 0), (0, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, BORDER),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(trip_tbl)
+        story.append(Spacer(1, 10))
+
+        pick_lat = trip.get("pickup_lat")
+        pick_lng = trip.get("pickup_lng")
+        drop_lat = trip.get("drop_lat")
+        drop_lng = trip.get("drop_lng")
+
+        def fmt(v):
+            return f"{v:.6f}" if isinstance(v, (int, float)) else "—"
+
+        gps_tbl = Table([
+            ["", "Latitude", "Longitude"],
+            ["Picking Point", fmt(pick_lat), fmt(pick_lng)],
+            ["Dropping Point", fmt(drop_lat), fmt(drop_lng)],
+        ], colWidths=[50 * mm, 65 * mm, 65 * mm])
+        gps_tbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+            ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#64748B")),
+            ("BACKGROUND", (0, 1), (0, -1), LIGHT),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, BORDER),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(gps_tbl)
+        story.append(Spacer(1, 12))
 
     # Notes (if any)
     note_txt = (expense.get("notes") or "").strip()

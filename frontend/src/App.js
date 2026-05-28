@@ -13,6 +13,7 @@ import Register from '@/pages/auth/Register';
 import Splash from '@/pages/app/Splash';
 import Categories from '@/pages/app/Categories';
 import SubCategory from '@/pages/app/SubCategory';
+import TravelSubCategory from '@/pages/app/TravelSubCategory';
 import Capture from '@/pages/app/Capture';
 import Editor from '@/pages/app/Editor';
 import PayNow from '@/pages/app/PayNow';
@@ -46,6 +47,7 @@ function App() {
           <Route path="/app" element={<Private><AppShell /></Private>}>
             <Route index element={<Splash />} />
             <Route path="categories" element={<Categories />} />
+            <Route path="category/travel" element={<TravelSubCategory />} />
             <Route path="category/:cat" element={<SubCategory />} />
             <Route path="capture/:cat/:sub" element={<Capture />} />
             <Route path="editor" element={<Editor />} />

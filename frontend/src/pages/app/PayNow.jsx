@@ -124,6 +124,7 @@ export default function PayNow() {
           latitude: geo.lat,
           longitude: geo.lng,
           payment_method: merchant.method,
+          ...(draft.trip_meta ? { trip: draft.trip_meta } : {}),
         },
       };
       const { data } = await api.post('/expenses', payload);

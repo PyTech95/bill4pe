@@ -23,6 +23,19 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-28 (Travel category redesigned)
+- **Dedicated TravelSubCategory page** (separate route `/app/category/travel`) — completely different flow from Food:
+  - Sub-categories reordered: **Auto Booking (default)**, E-Rickshaw, Bike, Cab, Bus, Taxi, Self Booking, Flight, Train, Toll (flight/train moved to bottom)
+  - **AI photo capture removed** (irrelevant for travel)
+  - **Items table removed**
+  - New **Destination block**: From (auto-filled from GPS via OpenStreetMap Nominatim reverse-geocode), To, Amount inputs
+  - **Two-point GPS**: Pickup point captured on page load; Dropping point captured on Pay Now click
+  - Live "Nature of business on bill" preview that updates with selected service ("Auto Driver", "Cab Driver", "Airline" etc.)
+  - Notes voice mic retained
+- **Backend `PaymentInfo`** extended with optional `trip: TripInfo` nested model (from_text, to_text, pickup_lat/lng, drop_lat/lng, nature_of_business)
+- **Bill PDF** now renders dedicated TRIP DETAILS block + Picking Point / Dropping Point GPS table for travel-category expenses; uses `trip.nature_of_business` when present
+- End-to-end tested: travel expense with full trip metadata → PDF extracted text confirms all fields render correctly
+
 ## What's Been Implemented — 2026-05-28 (SubCategory redesign per user feedback)
 - **Auto-select sub-category by time of day** (Food only): Breakfast (5-11AM), Lunch (11AM-4PM), Snacks (4-8PM), Dinner (8PM-5AM).
 - **Merchant entry block removed completely** from SubCategory page. Merchant details are now captured ONLY on PayNow page via QR scan (which is where it logically belongs — at point of payment).
