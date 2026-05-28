@@ -23,6 +23,15 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-28 (SubCategory redesign per user feedback)
+- **Auto-select sub-category by time of day** (Food only): Breakfast (5-11AM), Lunch (11AM-4PM), Snacks (4-8PM), Dinner (8PM-5AM).
+- **Merchant entry block removed completely** from SubCategory page. Merchant details are now captured ONLY on PayNow page via QR scan (which is where it logically belongs — at point of payment).
+- **Notes field added** with prominent "Speak" mic button — uses existing `/api/voice/expense` endpoint, takes only the transcript, appends to notes textarea (500 char limit, char counter shown).
+- **Bill PDF improved**:
+  - "Business Type" relabeled to "Nature of Business" with full label (e.g. "Food / Lunch")
+  - New "NOTES" section in PDF that prints user-entered notes (line-break preserved)
+- Tested end-to-end: created expense with notes via API → generated bill (₹5 deducted from wallet) → PDF extracted text confirms all 7 merchant fields + items + total + notes correctly printed.
+
 ## What's Been Implemented — 2026-05-28 (P2 features)
 - **Receipt OCR for printed bills** (`POST /api/ai/scan-receipt`):
   - Gemini 3 Flash with strong receipt-specific prompt

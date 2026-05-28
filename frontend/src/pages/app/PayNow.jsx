@@ -114,6 +114,7 @@ export default function PayNow() {
         category: draft.category,
         sub_category: draft.sub_category,
         items: draft.items,
+        notes: draft.notes || '',
         payment: {
           merchant_name: merchant.name,
           merchant_upi: merchant.upi,

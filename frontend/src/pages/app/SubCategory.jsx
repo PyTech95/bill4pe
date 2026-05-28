@@ -2,31 +2,36 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  QrCode, MapPin, Plus, Trash2, ArrowRight, Camera, ScanLine, Loader2, Building2,
-  Phone, ChevronDown, Sparkles, X, RefreshCw,
+  MapPin, Plus, Trash2, ArrowRight, Camera, Loader2, Building2,
+  Sparkles, X, RefreshCw, Mic, Square, StickyNote,
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { catByKey } from '@/lib/categories';
 import api from '@/lib/api';
 
 const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
 
-const parseUpi = (data) => {
-  try {
-    if (!data?.toLowerCase().startsWith('upi://')) return { upi: '', name: '' };
-    const q = data.split('?')[1] || '';
-    const params = Object.fromEntries(new URLSearchParams(q));
-    return { upi: params.pa || '', name: decodeURIComponent(params.pn || '') };
-  } catch { return { upi: '', name: '' }; }
+// Auto-pick food meal based on current hour.
+// 5–11 → Breakfast, 11–16 → Lunch, 16–20 → Snacks, else → Dinner.
+const foodMealByHour = (h) => {
+  if (h >= 5 && h < 11) return 'Breakfast';
+  if (h >= 11 && h < 16) return 'Lunch';
+  if (h >= 16 && h < 20) return 'Snacks';
+  return 'Dinner';
+};
+
+const defaultServiceFor = (cat) => {
+  if (cat?.key === 'food') {
+    const meal = foodMealByHour(new Date().getHours());
+    return (cat.sub || []).includes(meal) ? meal : cat.sub?.[0] || '';
+  }
+  return cat?.sub?.[0] || '';
 };
 
 export default function SubCategory() {
@@ -35,17 +40,22 @@ export default function SubCategory() {
   const c = catByKey(cat);
   const Icon = c?.icon || Building2;
 
-  const [serviceType, setServiceType] = useState(c?.sub?.[0] || '');
-  const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '' });
+  const [serviceType, setServiceType] = useState(defaultServiceFor(c));
   const [items, setItems] = useState([emptyItem()]);
+  const [notes, setNotes] = useState('');
   const [geo, setGeo] = useState({ lat: null, lng: null, status: 'idle' });
-  const [scanOpen, setScanOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiScanning, setAiScanning] = useState(false);
   const [preview, setPreview] = useState(null);
 
+  // Notes voice recording
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef(null);
+  const recChunksRef = useRef([]);
+  const recStreamRef = useRef(null);
+
   const fileRef = useRef(null);
-  const scannerRef = useRef(null);
 
   // Capture geolocation (callable + auto on mount)
   const captureLocation = () => {
@@ -69,37 +79,6 @@ export default function SubCategory() {
     captureLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // QR scanner lifecycle
-  useEffect(() => {
-    if (!scanOpen) return;
-    const id = setTimeout(() => {
-      const q = new Html5Qrcode('merchant-qr-reader');
-      scannerRef.current = q;
-      q.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decoded) => {
-          const parsed = parseUpi(decoded);
-          setMerchant((m) => ({
-            ...m,
-            upi: parsed.upi || decoded.slice(0, 100),
-            name: parsed.name || m.name,
-          }));
-          q.stop().catch(() => {}).then(() => setScanOpen(false));
-          toast.success('Merchant info captured from QR');
-        },
-        () => {}
-      ).catch(() => {
-        toast.error('Camera unavailable');
-        setScanOpen(false);
-      });
-    }, 200);
-    return () => {
-      clearTimeout(id);
-      try { scannerRef.current?.stop().catch(() => {}); } catch { /* ignore */ }
-    };
-  }, [scanOpen]);
 
   // Items helpers
   const updateItem = (idx, patch) =>
@@ -151,20 +130,72 @@ export default function SubCategory() {
       }));
     if (!cleaned.length) { toast.error('Add at least one item'); return; }
     if (total <= 0) { toast.error('Total must be > 0'); return; }
-    if (!merchant.name?.trim()) { toast.error('Enter merchant name'); return; }
 
     sessionStorage.setItem('bill4pe_draft', JSON.stringify({
       category: cat,
       sub_category: serviceType,
       items: cleaned,
-      prefill_merchant: {
-        merchant_name: merchant.name.trim(),
-        merchant_upi: merchant.upi.trim(),
-        merchant_mobile: merchant.mobile.trim(),
-      },
+      notes: notes?.trim() || '',
       prefill_geo: geo.status === 'ok' ? { lat: geo.lat, lng: geo.lng } : null,
     }));
     nav('/app/pay');
+  };
+
+  // -------- Notes voice recording --------
+  const startNotesRec = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.error('Voice recording not supported');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recStreamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recorderRef.current = rec;
+      recChunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data?.size) recChunksRef.current.push(e.data); };
+      rec.onstop = onNotesRecStop;
+      rec.start();
+      setRecording(true);
+    } catch {
+      toast.error('Microphone permission denied');
+    }
+  };
+
+  const stopNotesRec = () => {
+    try { recorderRef.current?.stop(); } catch { /* */ }
+  };
+
+  const onNotesRecStop = async () => {
+    setRecording(false);
+    try { recStreamRef.current?.getTracks().forEach((t) => t.stop()); } catch { /* */ }
+    recStreamRef.current = null;
+    const chunks = recChunksRef.current;
+    recChunksRef.current = [];
+    if (!chunks.length) return;
+    setTranscribing(true);
+    try {
+      const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
+      const fd = new FormData();
+      fd.append('file', blob, 'note.webm');
+      const { data } = await api.post('/voice/expense', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const txt = (data?.transcript || '').trim();
+      if (txt) {
+        setNotes((n) => (n ? `${n} ${txt}` : txt));
+        toast.success('Note transcribed');
+      } else {
+        toast.warning('Could not hear anything');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Transcription failed');
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   if (!c) return <div>Unknown category.</div>;
@@ -197,65 +228,6 @@ export default function SubCategory() {
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      {/* Merchant Card */}
-      <div className="flat-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">Merchant</div>
-            <div className="text-xs text-slate-500 mt-0.5">Scan QR or enter manually</div>
-          </div>
-          <button
-            onClick={() => setScanOpen(true)}
-            data-testid="scan-merchant-qr-btn"
-            className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-brand text-white text-xs font-semibold hover:bg-[#1858CC]"
-          >
-            <QrCode className="w-3.5 h-3.5" /> Scan QR
-          </button>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Name of merchant</label>
-            <Input
-              placeholder="e.g. Suresh Kumar"
-              value={merchant.name}
-              onChange={(e) => setMerchant({ ...merchant, name: e.target.value })}
-              className="mt-1 h-11 rounded-lg border-soft"
-              data-testid="merchant-name-input"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile</label>
-              <div className="relative mt-1">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <Input
-                  placeholder="98765 43210"
-                  value={merchant.mobile} type="tel" maxLength={10}
-                  onChange={(e) => setMerchant({ ...merchant, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                  className="pl-9 h-11 rounded-lg border-soft font-mono"
-                  data-testid="merchant-mobile-input"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UPI ID</label>
-              <Input
-                placeholder="merchant@upi"
-                value={merchant.upi}
-                onChange={(e) => setMerchant({ ...merchant, upi: e.target.value })}
-                className="mt-1 h-11 rounded-lg border-soft font-mono text-xs"
-                data-testid="merchant-upi-input"
-              />
-            </div>
-          </div>
-          <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
-            <Building2 className="w-3 h-3" />
-            Nature of business: <span className="font-semibold text-navy">{c.label} / {serviceType || '—'}</span>
-          </div>
-        </div>
       </div>
 
       {/* AI Photo Capture — Hero CTA */}
@@ -394,6 +366,54 @@ export default function SubCategory() {
         />
       </div>
 
+      {/* Notes (with voice mic) */}
+      <div className="flat-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <StickyNote className="w-4 h-4 text-navy" />
+            <div className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">
+              Notes (optional)
+            </div>
+          </div>
+          {!recording && !transcribing && (
+            <button
+              type="button"
+              onClick={startNotesRec}
+              data-testid="notes-mic-btn"
+              className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-navy text-lime text-xs font-bold hover:bg-[#152042]"
+            >
+              <Mic className="w-3.5 h-3.5" /> Speak
+            </button>
+          )}
+          {recording && (
+            <button
+              type="button"
+              onClick={stopNotesRec}
+              data-testid="notes-stop-btn"
+              className="press-down inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-red-500 text-white text-xs font-bold animate-pulse"
+            >
+              <Square className="w-3 h-3 fill-current" /> Stop
+            </button>
+          )}
+          {transcribing && (
+            <div className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full bg-brand/10 text-brand text-xs font-bold">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Transcribing
+            </div>
+          )}
+        </div>
+        <Textarea
+          placeholder='e.g. "Team lunch with 3 clients on Q4 review" or tap "Speak" and dictate...'
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="mt-3 rounded-lg border-soft min-h-[72px] text-sm"
+          data-testid="notes-textarea"
+          maxLength={500}
+        />
+        <div className="mt-1 text-[10px] text-slate-400 text-right font-mono">
+          {notes.length}/500
+        </div>
+      </div>
+
       {/* Location */}
       <div className={`flat-card p-4 flex items-center gap-3 ${geo.status === 'denied' ? 'border-red-200 bg-red-50' : geo.status === 'ok' ? 'border-emerald-200' : ''}`}>
         <div className={`w-9 h-9 rounded-lg grid place-items-center shrink-0 ${
@@ -467,21 +487,6 @@ export default function SubCategory() {
           </Button>
         </div>
       </div>
-
-      {/* QR scan sheet */}
-      <Sheet open={scanOpen} onOpenChange={setScanOpen}>
-        <SheetContent side="bottom" className="rounded-t-3xl border-0 px-5 pb-8 pt-7">
-          <SheetHeader className="text-left">
-            <SheetTitle className="font-display text-2xl text-navy">Scan merchant QR</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 flat-card p-2">
-            <div id="merchant-qr-reader" className="rounded-xl overflow-hidden bg-black aspect-square" />
-          </div>
-          <div className="mt-3 text-xs text-slate-500 text-center flex items-center justify-center gap-1.5">
-            <ScanLine className="w-3 h-3" /> Point at GPay / PhonePe / Paytm / BharatPe / BHIM QR
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* AI scanning overlay */}
       {aiOpen && (

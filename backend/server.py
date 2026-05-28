@@ -1009,15 +1009,18 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
 
     pay = expense.get("payment", {}) or {}
     # Merchant info
+    cat_label = (expense.get("category") or "").title() or "—"
+    sub_label = expense.get("sub_category") or ""
+    nature = f"{cat_label}{' / ' + sub_label if sub_label else ''}"
     story.append(Paragraph("MERCHANT DETAILS", h2_st))
     m_tbl = Table([
         ["Merchant Name", pay.get("merchant_name") or "—"],
-        ["Merchant UPI ID", pay.get("merchant_upi") or "—"],
         ["Mobile", pay.get("merchant_mobile") or "—"],
-        ["Business Type", expense.get("category", "—")],
+        ["UPI ID", pay.get("merchant_upi") or "—"],
+        ["Nature of Business", nature],
         ["Transaction ID", pay.get("transaction_id") or "—"],
         ["Payment Method", pay.get("payment_method", "UPI")],
-        ["Location", f"{pay.get('latitude', '—')}, {pay.get('longitude', '—')}"],
+        ["Location (Lat, Lng)", f"{pay.get('latitude', '—')}, {pay.get('longitude', '—')}"],
     ], colWidths=[45 * mm, 135 * mm])
     m_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
@@ -1068,7 +1071,14 @@ def build_pdf_bytes(expense: dict, user_name: str) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(items_tbl)
-    story.append(Spacer(1, 18))
+    story.append(Spacer(1, 12))
+
+    # Notes (if any)
+    note_txt = (expense.get("notes") or "").strip()
+    if note_txt:
+        story.append(Paragraph("NOTES", h2_st))
+        story.append(Paragraph(note_txt.replace("\n", "<br/>"), body_st))
+        story.append(Spacer(1, 12))
 
     # Footer
     story.append(Paragraph(
