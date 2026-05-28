@@ -17,6 +17,19 @@ import api from '@/lib/api';
 
 const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
 
+// Per-category item placeholder for the manual items table
+const ITEM_PLACEHOLDER = {
+  food:       'e.g. Roti',
+  grocery:    'e.g. Atta 5kg',
+  pantry:     'e.g. Nescafé 50g',
+  stationery: 'e.g. A4 sheets 500',
+  gift:       'e.g. Chocolate Hamper',
+  flower:     'e.g. Rose Bouquet',
+  cleaning:   'e.g. Surf Excel 1kg',
+  hotel:      'e.g. Room charges',
+  other:      'e.g. Item name',
+};
+
 // Per-category AI hero copy (action + items detected)
 const AI_COPY = {
   food:       { title: (s,c) => `Snap your ${(s || c.label).toLowerCase()} photo`, items: 'Dal, Roti, Sabji, Rice', cta: 'food photo' },
@@ -318,7 +331,7 @@ export default function SubCategory() {
             <div key={idx} className="grid grid-cols-12 gap-2 px-2 py-2 border-b border-soft last:border-0" data-testid={`item-row-${idx}`}>
               <div className="col-span-6">
                 <Input
-                  placeholder="e.g. Roti"
+                  placeholder={ITEM_PLACEHOLDER[cat] || ITEM_PLACEHOLDER.other}
                   value={it.name}
                   onChange={(e) => updateItem(idx, { name: e.target.value })}
                   className="h-9 rounded-md border-soft text-sm"
@@ -414,7 +427,7 @@ export default function SubCategory() {
           )}
         </div>
         <Textarea
-          placeholder='e.g. "Team lunch with 3 clients on Q4 review" or tap "Speak" and dictate...'
+          placeholder='Add context (optional) — or tap "Speak" and dictate...'
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           className="mt-3 rounded-lg border-soft min-h-[72px] text-sm"
