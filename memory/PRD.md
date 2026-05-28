@@ -23,6 +23,23 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Wallet must auto-deduct ₹5 on bill generation; recharge is mocked for v1.
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
+## What's Been Implemented — 2026-05-28 (P2 features)
+- **Receipt OCR for printed bills** (`POST /api/ai/scan-receipt`):
+  - Gemini 3 Flash with strong receipt-specific prompt
+  - Returns `{merchant_name, date, items[], subtotal, tax, total, category}`
+  - Auto-detects category (food/grocery/etc.) from store name
+  - Verified with synthetic Saravana Bhavan receipt: extracted all 3 items, GST, total ₹462, category=food correctly
+  - Frontend: white "Scan printed bill" card on home page → camera → live scanning overlay with laser animation → auto-fills draft → routes to Editor
+- **3-slide Onboarding tour**:
+  - Shows on first visit (localStorage `bill4pe_onboarded_v1`)
+  - Slides: Snap thali photo (AI Vision) → Speak expense (Voice AI) → Scan printed bill (Receipt OCR)
+  - Lime accent dots, smooth slide transitions, Skip + Next/Get started CTAs
+- **PWA Install banner**:
+  - Floating navy pill above bottom nav, shows when `beforeinstallprompt` fires (Android/desktop Chrome)
+  - "Install BILL4PE — Faster access, works offline" + lime Install button
+  - Dismiss snoozes for 7 days; hidden permanently if already installed (standalone mode)
+  - Both `OnboardingTour` and `PWAInstallBanner` mounted in AppShell so they're available across the whole app
+
 ## What's Been Implemented — 2026-05-27 (Post-MVP iteration)
 - **Voice expense entry (Whisper + Gemini)**: Big "Speak to log expense" hero card on home page.
   - 30-second MediaRecorder capture → uploads to `POST /api/voice/expense`

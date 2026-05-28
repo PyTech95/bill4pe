@@ -437,6 +437,25 @@ Detect each line item. Return ONLY a strict JSON array of {"name": str, "quantit
 No markdown, no prose, no code fences. If nothing detectable, return []."""
 
 
+RECEIPT_PROMPT = """You are an expert OCR receipt parser for Indian printed bills (Swiggy / Zomato / BigBazaar / DMart / Reliance Fresh / restaurants / pharmacies / grocery stores / petrol pumps).
+
+Carefully read the receipt photo. Extract:
+- merchant_name: the brand/store at the top of the receipt (e.g. "Swiggy", "BigBazaar", "Saravana Bhavan"). If unclear, return "".
+- date: bill date in YYYY-MM-DD if visible, else "".
+- items: array of line items. For each: {"name": short str, "quantity": int (default 1), "unit_price": float (INR per unit)}.
+    If only line total is printed (no per-unit price), set quantity=1 and unit_price=line_total.
+- subtotal: float (before tax) if printed, else 0.
+- tax: float (GST/CGST/SGST total) if printed, else 0.
+- total: final amount payable (after tax/discount) in INR.
+- category: best guess from ["food","travel","hotel","stationery","gift","pantry","flower","grocery","cleaning","other"].
+
+Return ONLY a strict JSON object, no markdown, no prose, no code fences. Example:
+
+{"merchant_name":"BigBazaar","date":"2026-01-15","items":[{"name":"Tata Salt 1kg","quantity":2,"unit_price":28},{"name":"Aashirvaad Atta 5kg","quantity":1,"unit_price":275}],"subtotal":331,"tax":0,"total":331,"category":"grocery"}
+
+If receipt unreadable, return {"merchant_name":"","date":"","items":[],"subtotal":0,"tax":0,"total":0,"category":"other"}."""
+
+
 @api.post("/ai/detect-items")
 async def detect_items(category: str = "food", file: UploadFile = File(...), user=Depends(get_current_user)):
     if not EMERGENT_LLM_KEY:
@@ -532,6 +551,87 @@ async def suggest_items(payload: dict, user=Depends(get_current_user)):
         return {"suggestions": [str(x) for x in arr if isinstance(x, (str, int, float))][:5]}
     except Exception:
         return {"suggestions": []}
+# =================== Receipt OCR (printed bills - Swiggy / BigBazaar / etc.) ===================
+@api.post("/ai/scan-receipt")
+async def scan_receipt(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """OCR a printed receipt photo into structured expense data."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "AI key not configured")
+    raw = await file.read()
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (max 8MB)")
+    mime = file.content_type or "image/jpeg"
+    if mime not in ("image/jpeg", "image/png", "image/webp"):
+        mime = "image/jpeg"
+    suffix = ".jpg" if "jpeg" in mime else (".png" if "png" in mime else ".webp")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(raw); tmp.flush(); tmp.close()
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"receipt-{uuid.uuid4()}",
+            system_message=RECEIPT_PROMPT,
+        ).with_model("gemini", "gemini-3-flash-preview")
+        msg = UserMessage(
+            text="Parse this Indian printed receipt. Return strict JSON object only.",
+            file_contents=[FileContentWithMimeType(file_path=tmp.name, mime_type=mime)],
+        )
+        reply = await chat.send_message(msg)
+        txt = (reply or "").strip()
+        if txt.startswith("```"):
+            txt = txt.strip("`")
+            if txt.lower().startswith("json"):
+                txt = txt[4:].strip()
+        start, end = txt.find("{"), txt.rfind("}")
+        if start >= 0 and end > start:
+            txt = txt[start:end + 1]
+        try:
+            parsed = json.loads(txt)
+        except Exception:
+            parsed = {}
+
+        valid_cats = {"food", "travel", "hotel", "stationery", "gift", "pantry", "flower", "grocery", "cleaning", "other"}
+        category = str(parsed.get("category", "other")).lower().strip()
+        if category not in valid_cats:
+            category = "other"
+
+        items = []
+        for it in (parsed.get("items") or []):
+            if not isinstance(it, dict):
+                continue
+            name = str(it.get("name", "")).strip()
+            if not name:
+                continue
+            try:
+                qty = float(it.get("quantity", 1) or 1)
+                price = float(it.get("unit_price", 0) or 0)
+            except Exception:
+                qty, price = 1.0, 0.0
+            items.append({"name": name, "quantity": qty, "unit_price": round(price, 2)})
+
+        def num(v):
+            try:
+                return round(float(v or 0), 2)
+            except Exception:
+                return 0.0
+
+        return {
+            "merchant_name": str(parsed.get("merchant_name", "")).strip(),
+            "date": str(parsed.get("date", "")).strip(),
+            "items": items,
+            "subtotal": num(parsed.get("subtotal")),
+            "tax": num(parsed.get("tax")),
+            "total": num(parsed.get("total")),
+            "category": category,
+        }
+    except Exception as e:
+        logger.exception("Receipt OCR failed")
+        raise HTTPException(500, f"Receipt OCR failed: {str(e)[:200]}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
 
 
 # =================== Voice Expense Entry (Whisper STT + Gemini parse) ===================

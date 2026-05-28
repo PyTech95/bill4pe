@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Home, LayoutDashboard, Wallet, User, FileBarChart, ChevronLeft } from 'lucide-react';
+import OnboardingTour from '@/components/OnboardingTour';
+import PWAInstallBanner from '@/components/PWAInstallBanner';
 
 const TopBar = () => {
   const navigate = useNavigate();
@@ -71,6 +73,8 @@ export default function AppShell() {
         <Outlet />
       </main>
       <BottomNav />
+      <PWAInstallBanner />
+      <OnboardingTour />
     </div>
   );
 }
