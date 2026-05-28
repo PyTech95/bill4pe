@@ -24,6 +24,13 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-02-28 (PayNow UPI app picker)
+- Replaced single generic "Pay via UPI App" button (which silently opened only the default UPI app — typically WhatsApp Pay on Android) with a 2-column app picker grid in `PayNow.jsx`.
+- User now explicitly chooses: Google Pay (`tez://upi/pay`), PhonePe (`phonepe://pay`), Paytm (`paytmmp://pay`), BHIM (`bhim://upi/pay`), Amazon Pay (`amazonpay://upi/pay`), WhatsApp (`whatsapp://pay`), or Other UPI (`upi://pay` Android chooser).
+- Each button uses brand-specific colors and the app's deep-link scheme to bypass Android's default-app behaviour.
+- Smoke-tested in preview at `/app/pay` — picker renders all 7 buttons with merchant + total intact.
+
+
 ## What's Been Implemented — 2026-02-28 (PayNow in-app browser detection)
 - Detect WhatsApp / Instagram / Facebook / iOS WKWebView in PayNow.jsx and show amber warning banner immediately on entry.
 - 9-second hard timeout on `getUserMedia` probe — if camera never responds (typical iOS WhatsApp behaviour), auto-switch to `inapp` status with overlay + "Enter UPI Manually" CTA.

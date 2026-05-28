@@ -288,7 +288,20 @@ export default function PayNow() {
     try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* */ }
   };
 
-  const buildUpiLink = (scheme = 'upi') => {
+  // UPI deep-link schemes per app. Path differs per app:
+  //  - upi/gpay (tez) / bhim / amazonpay use   <scheme>://upi/pay?...
+  //  - phonepe / paytmmp / whatsapp use        <scheme>://pay?...
+  const UPI_APPS = [
+    { id: 'gpay',     label: 'Google Pay', scheme: 'tez',        path: 'upi/pay', tint: 'bg-white text-navy border-soft' },
+    { id: 'phonepe',  label: 'PhonePe',    scheme: 'phonepe',    path: 'pay',     tint: 'bg-[#5f259f] text-white border-transparent' },
+    { id: 'paytm',    label: 'Paytm',      scheme: 'paytmmp',    path: 'pay',     tint: 'bg-[#00baf2] text-white border-transparent' },
+    { id: 'bhim',     label: 'BHIM',       scheme: 'bhim',       path: 'upi/pay', tint: 'bg-[#ff7a00] text-white border-transparent' },
+    { id: 'amazon',   label: 'Amazon Pay', scheme: 'amazonpay',  path: 'upi/pay', tint: 'bg-[#232f3e] text-white border-transparent' },
+    { id: 'whatsapp', label: 'WhatsApp',   scheme: 'whatsapp',   path: 'pay',     tint: 'bg-[#25d366] text-white border-transparent' },
+    { id: 'other',    label: 'Other UPI',  scheme: 'upi',        path: 'pay',     tint: 'bg-navy text-white border-transparent' },
+  ];
+
+  const buildUpiLink = (scheme = 'upi', path = 'pay') => {
     const params = new URLSearchParams({
       pa: merchant.upi,
       pn: merchant.name || 'Merchant',
@@ -296,12 +309,12 @@ export default function PayNow() {
       cu: 'INR',
       tn: 'BILL4PE Expense',
     });
-    return `${scheme}://pay?${params.toString()}`;
+    return `${scheme}://${path}?${params.toString()}`;
   };
 
-  const launchUpiApp = (scheme = 'upi') => {
+  const launchUpiApp = (scheme = 'upi', path = 'pay') => {
     if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
-    const link = buildUpiLink(scheme);
+    const link = buildUpiLink(scheme, path);
     try {
       const a = document.createElement('a');
       a.href = link;
@@ -314,7 +327,7 @@ export default function PayNow() {
       window.location.href = link;
     }
     setTimeout(() => {
-      toast.info('App nahin khula? Niche se UPI ID copy karke GPay/PhonePe me paste kariye.', { duration: 5000 });
+      toast.info('App nahin khula? Niche se UPI ID copy karke apne UPI app me paste kariye.', { duration: 5000 });
     }, 2200);
   };
 
@@ -520,16 +533,27 @@ export default function PayNow() {
           <div className="flat-card p-5 space-y-3">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Pay this merchant</div>
             <p className="text-xs text-slate-500 leading-snug">
-              Tap to open your UPI app (GPay / PhonePe / Paytm) with merchant &amp; amount pre-filled. Complete the payment, then come back here.
+              Apne pasand ka UPI app chuniye — merchant &amp; amount pre-filled aa jayega.
             </p>
-            <a
-              href={merchant.upi ? buildUpiLink('upi') : '#'}
-              onClick={(e) => { if (!merchant.upi) { e.preventDefault(); toast.error('Merchant UPI ID required'); } else { launchUpiApp('upi'); } }}
-              data-testid="open-upi-app-btn"
-              className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-lime text-navy text-sm font-bold shadow-sm"
-            >
-              <Smartphone className="w-4 h-4" /> Pay ₹{total.toFixed(2)} via UPI App
-            </a>
+
+            <div className="grid grid-cols-2 gap-2 pt-1" data-testid="upi-app-picker">
+              {UPI_APPS.map((app) => (
+                <button
+                  key={app.id}
+                  type="button"
+                  onClick={() => launchUpiApp(app.scheme, app.path)}
+                  data-testid={`pay-${app.id}-btn`}
+                  className={`press-down inline-flex items-center justify-center gap-2 h-12 rounded-xl border text-sm font-bold shadow-sm ${app.tint}`}
+                >
+                  <Smartphone className="w-4 h-4" /> {app.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-1 text-center text-[11px] font-bold text-navy">
+              Total: ₹{total.toFixed(2)}
+            </div>
+
             <button
               onClick={copyUpiId}
               data-testid="copy-upi-btn"
