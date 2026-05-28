@@ -153,3 +153,11 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Validate live end-to-end on mobile device (PWA install + camera + QR scan + UPI deep-link).
 - Add empty-state illustrations on Dashboard and Wallet.
 - Consider Razorpay integration for real wallet top-ups.
+
+## Update — Feb 2026 (PayNow camera UX)
+- Removed prominent "Enter UPI Manually" shortcut buttons from `PayNow.jsx` (top-of-page CTA + inside "Starting camera…" overlay) per user request — focus is on the camera actually opening.
+- Increased camera watchdog timeout from 5s to **15s** so iOS Safari has enough time to render its native permission prompt and for the user to tap *Allow* before the page shows a false-failure overlay.
+- Added a primary **"Retry Camera"** button in the error overlay (replaces the manual-entry CTA). Manual entry is now a tiny secondary text link inside the error overlay only — never on the happy path.
+- Removed unused `KeyRound` import.
+- File touched: `/app/frontend/src/pages/app/PayNow.jsx`.
+- Production note: user must redeploy to `ai-payment-workflow.emergent.host` to see these fixes live.

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
-import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, Camera, AlertCircle, KeyRound, ExternalLink, Copy } from 'lucide-react';
+import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, Camera, AlertCircle, ExternalLink, Copy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -109,7 +109,8 @@ export default function PayNow() {
       }
 
       // Hard-stop watchdog — covers iOS in-app WebViews that never resolve getUserMedia.
-      // Reduced from 12s -> 5s so users see the manual-entry CTA much faster.
+      // 15s gives iOS Safari enough time to show the native permission prompt AND for the
+      // user to tap "Allow". Anything shorter shows a false "camera failed" before the prompt.
       probeTimerRef.current = setTimeout(() => {
         if (cancelled) return;
         // Don't override if scanner already running
@@ -120,10 +121,10 @@ export default function PayNow() {
         setScanStatus(browserInfo.isInApp ? 'inapp' : 'error');
         setScanError(
           browserInfo.isInApp
-            ? `${browserInfo.name} se camera nahin chalega. Safari/Chrome me kholiye, ya neeche UPI manually enter kariye.`
-            : 'Camera response nahin de raha. Neeche UPI manually enter kariye.'
+            ? `${browserInfo.name} me camera band rehta hai. Safari/Chrome me link kholiye.`
+            : 'Camera permission allow kariye aur page refresh kariye.'
         );
-      }, 5000);
+      }, 15000);
 
       // NOTE: do NOT probe getUserMedia separately on iOS — calling getUserMedia twice
       // (once to probe, once via Html5Qrcode) makes iOS Safari hang indefinitely because
@@ -267,6 +268,20 @@ export default function PayNow() {
     setStage('confirm');
   };
 
+  const retryCamera = async () => {
+    // Tear down any existing scanner, reset state, then re-trigger the start effect
+    if (probeTimerRef.current) { clearTimeout(probeTimerRef.current); probeTimerRef.current = null; }
+    try { await scannerRef.current?.stop(); } catch { /* */ }
+    try { scannerRef.current?.clear(); } catch { /* */ }
+    scannerRef.current = null;
+    startedRef.current = false;
+    setScanError('');
+    setScanStatus('starting');
+    // Force the start effect to re-run by toggling stage off and back
+    setStage('confirm');
+    setTimeout(() => setStage('scan'), 30);
+  };
+
   const openInExternalBrowser = async () => {
     const url = window.location.href;
     try {
@@ -391,15 +406,7 @@ export default function PayNow() {
             </div>
           )}
 
-          {/* Always-visible manual entry CTA — above the camera box so users never have to wait */}
-          <button
-            onClick={skipScan}
-            data-testid="top-manual-entry-btn"
-            className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-lime text-navy text-sm font-bold shadow-sm hover:brightness-95"
-          >
-            <KeyRound className="w-4 h-4" /> Enter UPI ID Manually (Skip Camera)
-          </button>
-
+          {/* Camera viewport */}
           <div className="flat-card p-3 relative">
             <div
               id="qr-reader"
@@ -413,14 +420,9 @@ export default function PayNow() {
               <div className="absolute inset-3 rounded-xl bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white text-center px-6">
                 <Loader2 className="w-8 h-8 animate-spin text-lime" />
                 <div className="mt-3 text-xs uppercase tracking-[0.25em] font-bold">Starting camera…</div>
-                <div className="mt-1 text-[11px] text-white/60">Allow camera permission if prompted</div>
-                <button
-                  onClick={skipScan}
-                  data-testid="starting-manual-fallback-btn"
-                  className="press-down mt-5 inline-flex items-center gap-2 h-11 px-5 bg-lime text-navy rounded-full font-bold text-sm"
-                >
-                  <KeyRound className="w-4 h-4" /> Enter UPI Manually
-                </button>
+                <div className="mt-2 text-[11px] text-white/70 leading-snug max-w-[240px]">
+                  Browser permission prompt aane par <b className="text-lime">Allow</b> kariye
+                </div>
               </div>
             )}
             {(scanStatus === 'error' || scanStatus === 'denied' || scanStatus === 'inapp') && (
@@ -436,24 +438,31 @@ export default function PayNow() {
                     : 'Camera unavailable'}
                 </div>
                 <div className="mt-1 text-[11px] text-white/70 leading-snug max-w-[280px]">
-                  {scanError || 'Tap below to enter the merchant UPI ID manually.'}
+                  {scanError || 'Allow camera access in your browser settings, then retry.'}
                 </div>
                 <button
-                  onClick={skipScan}
-                  data-testid="enter-manually-btn"
+                  onClick={retryCamera}
+                  data-testid="retry-camera-btn"
                   className="press-down mt-4 inline-flex items-center gap-2 h-11 px-5 bg-lime text-navy rounded-full font-bold text-sm"
                 >
-                  <KeyRound className="w-4 h-4" /> Enter UPI Manually
+                  <RefreshCw className="w-4 h-4" /> Retry Camera
                 </button>
                 {scanStatus === 'inapp' && (
                   <button
                     onClick={openInExternalBrowser}
                     data-testid="overlay-open-external-btn"
-                    className="press-down mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/70 underline underline-offset-2"
+                    className="press-down mt-3 inline-flex items-center gap-1.5 text-[11px] text-white/80 underline underline-offset-2"
                   >
                     <ExternalLink className="w-3 h-3" /> Open in Safari/Chrome
                   </button>
                 )}
+                <button
+                  onClick={skipScan}
+                  data-testid="enter-manually-btn"
+                  className="mt-3 text-[11px] text-white/60 underline underline-offset-2"
+                >
+                  or enter UPI manually
+                </button>
               </div>
             )}
 
