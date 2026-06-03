@@ -133,11 +133,11 @@ export default function Splash() {
         </div>
       </motion.div>
 
-      {/* ------- Voice expense entry (AI Whisper) ------- */}
-      <VoiceExpense />
-
       {/* ------- Receipt OCR scanner ------- */}
       <ReceiptScan />
+
+      {/* ------- Voice expense entry (AI Whisper) ------- */}
+      <VoiceExpense />
 
       {/* ------- Quick action chips ------- */}
       <motion.div

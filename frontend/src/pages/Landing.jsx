@@ -39,7 +39,7 @@ const Hero = () => {
       <Section className="relative pt-20 pb-24 md:pt-28 md:pb-32">
         <div className="grid lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-7">
-            <Pill dark><Sparkles className="w-3 h-3" /> AI Powered Reimbursement</Pill>
+            <Pill dark><Sparkles className="w-3 h-3" /> An Intelligent Billing</Pill>
             <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-7xl mt-6 tracking-tight leading-[1.05]">
               Pay your bill.<br />
               <span className="text-lime">Generate</span> the invoice.<br />

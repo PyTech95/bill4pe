@@ -345,8 +345,10 @@ export default function PayNow() {
   };
 
   const submit = async () => {
-    if (!merchant.name?.trim() || !merchant.upi?.trim()) { toast.error('Merchant Name & UPI required'); return; }
-    if (!merchant.txnId?.trim()) { toast.error('Enter Transaction ID after paying'); return; }
+    const isCash = merchant.method === 'Cash';
+    if (!merchant.name?.trim()) { toast.error('Merchant Name required'); return; }
+    if (!isCash && !merchant.upi?.trim()) { toast.error('Merchant UPI required'); return; }
+    if (!isCash && !merchant.txnId?.trim()) { toast.error('Enter Transaction ID after paying'); return; }
     setStage('submitting');
     try {
       const payload = {
@@ -356,9 +358,9 @@ export default function PayNow() {
         notes: draft.notes || '',
         payment: {
           merchant_name: merchant.name,
-          merchant_upi: merchant.upi,
+          merchant_upi: isCash ? '' : merchant.upi,
           merchant_mobile: merchant.mobile,
-          transaction_id: merchant.txnId,
+          transaction_id: isCash ? (merchant.txnId?.trim() || `CASH-${Date.now()}`) : merchant.txnId,
           amount: total,
           latitude: geo.lat,
           longitude: geo.lng,
@@ -507,11 +509,44 @@ export default function PayNow() {
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
           </div>
+          <div className="flex items-center justify-center gap-4 text-xs">
+            <button
+              type="button"
+              onClick={() => { setMerchant((m) => ({ ...m, method: 'Cash' })); skipScan(); }}
+              data-testid="pay-cash-skip-btn"
+              className="press-down inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-soft text-navy font-semibold"
+            >
+              Pay in Cash
+            </button>
+          </div>
         </div>
       )}
 
       {(stage === 'confirm' || stage === 'submitting') && (
         <div className="mt-5 space-y-4">
+          {/* Payment Mode Toggle */}
+          <div className="flat-card p-4">
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Payment Mode</div>
+            <div className="mt-3 grid grid-cols-2 gap-2" data-testid="payment-mode-toggle">
+              <button
+                type="button"
+                onClick={() => setMerchant({ ...merchant, method: 'UPI' })}
+                data-testid="paymode-upi-btn"
+                className={`press-down h-11 rounded-xl border text-sm font-semibold ${merchant.method !== 'Cash' ? 'bg-navy text-white border-transparent' : 'bg-white text-navy border-soft'}`}
+              >
+                UPI / QR
+              </button>
+              <button
+                type="button"
+                onClick={() => setMerchant({ ...merchant, method: 'Cash' })}
+                data-testid="paymode-cash-btn"
+                className={`press-down h-11 rounded-xl border text-sm font-semibold ${merchant.method === 'Cash' ? 'bg-navy text-white border-transparent' : 'bg-white text-navy border-soft'}`}
+              >
+                Cash
+              </button>
+            </div>
+          </div>
+
           <div className="flat-card p-5">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Merchant</div>
             <div className="mt-3 space-y-3">
@@ -521,9 +556,9 @@ export default function PayNow() {
                        className="mt-1 h-11 rounded-lg border-soft" data-testid="merchant-name-input" placeholder="e.g. Suresh Tiffin Centre" />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UPI ID</label>
+                <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UPI ID {merchant.method === 'Cash' && '(optional)'}</label>
                 <Input value={merchant.upi} onChange={(e) => setMerchant({ ...merchant, upi: e.target.value })}
-                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-upi-input" placeholder="merchant@upi" />
+                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-upi-input" placeholder={merchant.method === 'Cash' ? 'Skip if no UPI' : 'merchant@upi'} />
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile (optional)</label>
@@ -533,6 +568,7 @@ export default function PayNow() {
             </div>
           </div>
 
+          {merchant.method !== 'Cash' && (
           <div className="flat-card p-5 space-y-3">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Pay this merchant</div>
             <p className="text-xs text-slate-500 leading-snug">
@@ -572,13 +608,14 @@ export default function PayNow() {
               )}
             </div>
           </div>
+          )}
 
           <div className="flat-card p-5">
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">After paying</div>
-            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UTR / Transaction ID</label>
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Confirm cash payment' : 'After paying'}</div>
+            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Receipt # (optional)' : 'UTR / Transaction ID'}</label>
             <Input value={merchant.txnId} onChange={(e) => setMerchant({ ...merchant, txnId: e.target.value })}
-                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder="123456789012" />
-            <p className="text-[11px] text-slate-400 mt-1">From your UPI app receipt.</p>
+                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder={merchant.method === 'Cash' ? 'e.g. receipt or memo no.' : '123456789012'} />
+            <p className="text-[11px] text-slate-400 mt-1">{merchant.method === 'Cash' ? 'Total cash paid: ₹' + total.toFixed(2) : 'From your UPI app receipt.'}</p>
             <Button
               data-testid="confirm-payment-btn"
               onClick={submit}
@@ -588,7 +625,7 @@ export default function PayNow() {
               {stage === 'submitting' ? (
                 <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Saving…</span>
               ) : (
-                <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Confirm payment</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {merchant.method === 'Cash' ? 'Mark Cash Paid' : 'Confirm payment'}</span>
               )}
             </Button>
           </div>

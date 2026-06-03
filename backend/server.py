@@ -121,7 +121,7 @@ class PaymentInfo(BaseModel):
     amount: float
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    payment_method: str = "UPI"  # GPay/PhonePe/Paytm/BharatPe/BHIM
+    payment_method: str = "UPI"  # UPI/Cash/GPay/PhonePe/Paytm/BharatPe/BHIM
     trip: Optional[TripInfo] = None
     stay: Optional[StayInfo] = None
 
@@ -1126,7 +1126,7 @@ def build_pdf_bytes(expense: dict, user: dict) -> bytes:
         [Paragraph("<b>BILL4PE</b>", title_st),
          Paragraph(f"<b>OFFICIAL INVOICE</b><br/>"
                    f"Bill ID: {bill_id_str}<br/>"
-                   f"Date: {expense['created_at'][:10]}", sub_st),
+                   f"Date: {expense['created_at'][:16].replace('T', ' ')}", sub_st),
          qr_drawing],
     ], colWidths=[70 * mm, 85 * mm, 25 * mm])
     header_tbl.setStyle(TableStyle([
@@ -1138,7 +1138,7 @@ def build_pdf_bytes(expense: dict, user: dict) -> bytes:
     ]))
     story.append(header_tbl)
     story.append(Spacer(1, 6))
-    story.append(Paragraph("Pay Your Bill — AI Powered Expense & Invoice Platform · Scan QR to verify authenticity", sub_st))
+    story.append(Paragraph("An Intelligent Billing — Scan QR to verify authenticity", sub_st))
     story.append(Spacer(1, 14))
 
     pay = expense.get("payment", {}) or {}
@@ -1458,7 +1458,7 @@ def build_report_pdf(report: dict, expenses: List[dict], user_name: str) -> byte
         [Paragraph("<b>BILL4PE</b>", title_st),
          Paragraph(f"<b>EXPENSE REPORT</b><br/>"
                    f"Report ID: {report['id'][:8].upper()}<br/>"
-                   f"Date: {report['created_at'][:10]}<br/>"
+                   f"Date: {report['created_at'][:16].replace('T', ' ')}<br/>"
                    f"Items: {len(expenses)}", sub_st)],
     ], colWidths=[90 * mm, 90 * mm])
     header_tbl.setStyle(TableStyle([
@@ -1509,14 +1509,14 @@ def build_report_pdf(report: dict, expenses: List[dict], user_name: str) -> byte
         pay = e.get("payment") or {}
         rows.append([
             str(idx),
-            (e.get("created_at") or "")[:10],
+            (e.get("created_at") or "")[:16].replace("T", " "),
             (e.get("category", "") + ("/" + e["sub_category"] if e.get("sub_category") else "")).title(),
             (pay.get("merchant_name") or "—")[:24],
             (e.get("bill_id") or e["id"][:6].upper()),
             f"{float(e.get('total', 0)):.2f}",
         ])
     rows.append(["", "", "", "", "TOTAL", f"₹ {total:.2f}"])
-    items_tbl = Table(rows, colWidths=[10 * mm, 22 * mm, 38 * mm, 50 * mm, 30 * mm, 30 * mm])
+    items_tbl = Table(rows, colWidths=[10 * mm, 28 * mm, 34 * mm, 48 * mm, 30 * mm, 30 * mm])
     items_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 8.5),

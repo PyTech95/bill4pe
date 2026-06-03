@@ -200,7 +200,7 @@ export default function Dashboard() {
                     {e.payment?.merchant_name || (c?.label + ' expense')}
                   </div>
                   <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                    {e.created_at?.slice(0, 10)} · {(c?.label || e.category)}{e.sub_category ? ' / ' + e.sub_category : ''}
+                    {(e.created_at || '').slice(0, 16).replace('T', ' ')} · {(c?.label || e.category)}{e.sub_category ? ' / ' + e.sub_category : ''}
                   </div>
                 </div>
                 <div className="text-right">

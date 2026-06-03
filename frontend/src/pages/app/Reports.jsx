@@ -164,7 +164,7 @@ export default function Reports() {
                             {e.payment?.merchant_name || (c?.label + ' expense')}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            {e.created_at?.slice(0, 10)} · {c?.label}
+                            {(e.created_at || '').slice(0, 16).replace('T', ' ')} · {c?.label}
                           </div>
                         </div>
                         <div className="font-mono text-sm font-bold text-navy">₹ {Number(e.total).toFixed(0)}</div>
@@ -222,7 +222,7 @@ export default function Reports() {
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold text-navy truncate">{r.title}</div>
                   <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" /> {r.created_at?.slice(0, 10)} · {r.expense_count} bills
+                    <Calendar className="w-3 h-3" /> {(r.created_at || '').slice(0, 16).replace('T', ' ')} · {r.expense_count} bills
                   </div>
                 </div>
                 <div className="text-right">

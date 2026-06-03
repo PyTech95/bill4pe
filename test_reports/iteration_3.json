@@ -1,0 +1,46 @@
+{
+  "summary": "Regression for BILL4PE UX changes (Cash payment mode, PDF date+time, tagline) + AI/voice/reports endpoints + GSTIN auto-print + referral validate + phone-OTP. Backend pytest: 41/42 PASS (1 pre-existing test-fixture failure: missing /tmp/thali.jpg for Gemini detect-items). Frontend smoke: Landing pill 'AN INTELLIGENT BILLING' verified, phone OTP (9999999999/123456) login works, Dashboard date+time format YYYY-MM-DD HH:MM verified (3 sample rows '2026-05-28 08:27' etc), 'AI Powered Reimbursement' stale tagline removed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/referrals/validate/{code}", "issue": "Returns 404 for unknown codes instead of 200 {valid:false} — frontend should handle both (currently treats 404 as invalid which works, but inconsistent with happy-path 200)"},
+      {"endpoint": "/api/voice/expense", "issue": "Returns 422 for silent/empty audio with detail 'Could not hear anything in the audio' (acceptable behavior, but 400/422 split could be standardized)"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "App shell / Splash first-load", "issues": ["First-run AI-Vision onboarding overlay covers the Splash AI Tool grid (ReceiptScan/VoiceExpense). The order swap (Receipt first, then Voice) is verified via static source (Splash.jsx lines 137 & 140) but cannot be visually asserted until the onboarding is dismissed. Suggest auto-storing the onboarded flag after first dismiss so re-login does not always re-trigger overlay."]},
+      {"screen": "Brand logo on dark surfaces (pre-existing from iter-2)", "issues": ["/public/logo.png rendered with `brightness(0) invert(1)` collapses to a white blob — replace with a transparent SVG/PNG containing the actual wordmark."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bill4pe.py",
+    "/app/backend/tests/test_bill4pe_v2.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add /tmp/thali.jpg fixture (or skip test_ai_detect_items_food when fixture missing) to remove the single pytest failure",
+    "(Optional) Standardize /api/referrals/validate to always return 200 with {valid: bool} to match the documented contract",
+    "(Optional) Persist 'onboarded' flag in localStorage so the AI-Vision overlay doesn't re-show every login (currently obscures Splash content for new browser sessions)",
+    "Note: The original problem statement said convenience fee is ₹2 deducted on POST /api/expenses; actual implementation deducts ₹5 (BILL_FEE=5.0) on POST /api/bills/{eid}/generate. This is by design per existing tests (test_generate_bill_deducts_5_and_idempotent passes). If product wants ₹2 on expense creation, that's a separate task."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1648 lines — exceeds 700-line guideline; split into routers (auth, expenses, bills, reports, ai, wallet) and pdf builders",
+    "Bill/Report PDF date+time uses naive string slicing `created_at[:16].replace('T',' ')` — works because now_iso() returns ISO with 'T'; safer to parse and reformat with datetime.strftime",
+    "/api/referrals/validate/{code} raises 404 for unknown codes; FE expects {valid:false} truthy contract — minor mismatch",
+    "PayNow.jsx force-starts html5-qrcode on `scan` stage even on devices without mediaDevices (pre-existing) — pay-cash-skip-btn now provides a clean exit, good",
+    "Voice expense returns HTTP 422 with detail string (FastAPI-style validation error code) for non-validation business issue ('Could not hear anything') — should be 400/422 consistently; consider 400 since it is a business condition not pydantic validation"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bill4pe_v2.py (new file — 16 tests for Cash mode, /reports PDF, AI scan-receipt, voice/expense, GSTIN auto-print, PDF date+time tagline, phone OTP, referrals validate)"
+  ],
+  "success_rate": {"backend": "97.6% (41/42)", "frontend": "smoke only — Landing tagline + Phone OTP login + Dashboard date+time format verified, deeper Cash flow E2E blocked by onboarding overlay but static JSX & data-testids confirmed present"},
+  "test_credentials": "Phone OTP: 9999999999 / 123456 (mocked). Email/password: any new email + Secret@12345 via /api/auth/register.",
+  "seed_data_creation": "Each pytest session creates 2 fresh users + cash/UPI/GSTIN expenses + a report titled 'TEST_QA Report' under each user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file is /app/backend/tests/test_bill4pe_v2.py (16 tests, ALL PASS) — covers: phone OTP login, referrals me/validate, Cash payment_method end-to-end (create expense + generate bill + PDF text extracts 'Payment Method' + 'Cash' via pypdf), Reports PDF has tagline 'Intelligent Billing' and YYYY-MM-DD HH:MM date pattern, GSTIN save+invalid+auto-print on PDF (extracted via pypdf), /api/ai/scan-receipt route exists, /api/voice/expense route exists (returns 422 'Could not hear anything' for silent audio — acceptable). PDF text extraction must use pypdf.PdfReader (ReportLab's output uses ASCII85 compressed streams; substring grep on raw bytes does not work). The single remaining pytest failure is /tmp/thali.jpg missing — pre-existing in test_bill4pe.py iter-1/2, gated behind os.path.exists assertion.",
+  "rca of the issue": "N/A — no functional bugs found. Backend Cash payment mode, AI/voice endpoints, reports, GSTIN auto-print, phone OTP, referral validate, PDF date+time, QR verification URL, tagline ('An Intelligent Billing — Scan QR to verify authenticity') are all wired correctly. Frontend changes (PayNow data-testids paymode-upi-btn/paymode-cash-btn/pay-cash-skip-btn/confirm-payment-btn, Splash order ReceiptScan→VoiceExpense, Landing pill 'AN INTELLIGENT BILLING') are present in source and where reachable confirmed live."
+}
