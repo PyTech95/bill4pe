@@ -24,6 +24,14 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-02-28 (Vision/Mission/Ethics official copy)
+- Replaced placeholder Vision & Mission copy on Landing page with the **official corporate Vision, Mission and Ethics** content from user's "Vision Mission Ethics-Bill4Pe.docx".
+- Layout upgraded from 2-card to **3-card grid** (Vision · Mission · Ethics) inside `#vision` section of `Landing.jsx`.
+- Added `Scale` icon (lucide) for Ethics card; data-testids: `vision-card`, `mission-card`, `ethics-card`.
+- Section heading updated to "Smart, secure & leakage-free expense management for modern corporates."
+- Footer link relabeled "Vision, Mission & Ethics".
+- Visually verified via screenshot at `/#vision` — all 3 cards render cleanly side-by-side on desktop, stack on mobile.
+
 ## What's Been Implemented — 2026-02-28 (Testing debt cleared)
 - Ran `testing_agent_v3_fork` for full regression on the UX polish batch (tagline, splash reorder, datetime, Cash mode).
 - **Backend**: 16/16 pytest pass on `/app/backend/tests/test_bill4pe_v2.py` — Phone OTP, auth/me, referrals, Cash payment_method E2E, PDF date+time, PDF tagline "Intelligent Billing", Reports CRUD+PDF, scan-receipt route, voice/expense route, GSTIN auto-print.

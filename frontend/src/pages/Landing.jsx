@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ScanLine, QrCode, FileText, Wallet, Sparkles, ArrowRight, Check,
-  Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake,
+  Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake, Scale,
   Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -477,36 +477,60 @@ const VisionMission = () => (
     <div className="max-w-3xl">
       <Pill dark>Why we exist</Pill>
       <h2 className="font-display text-3xl sm:text-5xl font-bold mt-4 tracking-tight">
-        We're rebuilding how India does reimbursement.
+        Smart, secure & leakage-free expense management for modern corporates.
       </h2>
     </div>
 
-    <div className="grid md:grid-cols-2 gap-6 mt-14">
-      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors">
+    <div className="grid md:grid-cols-3 gap-6 mt-14">
+      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors" data-testid="vision-card">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
           <Eye className="w-3 h-3" /> Our Vision
         </div>
-        <h3 className="font-display text-2xl sm:text-3xl font-bold mt-5 tracking-tight">
-          Zero-friction expense reimbursement for every Indian professional.
+        <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
+          A leakage-free, AI-powered expense ecosystem for every corporate.
         </h3>
-        <p className="mt-5 text-white/60 leading-relaxed">
-          A world where no one chases a colleague for a receipt, no manager rejects a bill on a
-          technicality, and no employee waits weeks for ₹500 to come back. From the salesperson
-          in Indore to the consultant in Bengaluru — one tap, one invoice, done.
+        <p className="mt-5 text-white/60 leading-relaxed text-sm">
+          Bill4Pe is envisioned as a smart and secure platform that transforms how corporates
+          manage imprest and petty expenses. With AI-enabled self-invoicing, employees and contract
+          workers can generate instant, authenticated invoices — eliminating financial leakages,
+          preventing fraudulent claims, and replacing the risk of fake cash memos. Every transaction
+          carries verified merchant details and embedded geolocation data, giving organizations
+          real-time visibility, audit-ready documentation and total financial control.
         </p>
       </div>
 
-      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors">
+      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors" data-testid="mission-card">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
           <Target className="w-3 h-3" /> Our Mission
         </div>
-        <h3 className="font-display text-2xl sm:text-3xl font-bold mt-5 tracking-tight">
-          Replace paper receipts and clunky expense forms with one AI-first mobile workflow.
+        <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
+          Instant, authenticated self-invoices for unregistered-supplier expenses.
         </h3>
-        <p className="mt-5 text-white/60 leading-relaxed">
-          We combine UPI payments, computer vision and PDF generation into a single 60-second journey.
-          What used to need a phone, a calculator, a printer and a forwarded email is now one
-          installable app on your home screen.
+        <p className="mt-5 text-white/60 leading-relaxed text-sm">
+          To revolutionize corporate expense management by offering an AI-enabled, smart and secure
+          platform that facilitates the instant generation of self-invoices for expenses incurred
+          from unregistered suppliers who do not provide authenticated or acceptable bills. We are
+          committed to transparency, accuracy and fraud prevention through verified data, merchant
+          details and geolocation tracking — collaborating with individuals and corporates to promote
+          genuine, compliant self-invoicing practices.
+        </p>
+      </div>
+
+      <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors" data-testid="ethics-card">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
+          <Scale className="w-3 h-3" /> Our Ethics
+        </div>
+        <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
+          Integrity, transparency & accountability — by design.
+        </h3>
+        <p className="mt-5 text-white/60 leading-relaxed text-sm">
+          Bill4Pe is committed to upholding the highest standards of integrity, transparency and
+          accountability in corporate expense management. Our ethical foundation enables the
+          generation of genuine, leakage-free and compliant self-invoices through an AI-enabled,
+          secure platform. Every expense incurred during official activities is accurately recorded
+          and supported with reliable data — including geolocation tracking — for authenticity and
+          traceability. We promote trust, eliminate misuse and foster responsible financial practices
+          that benefit organizations and their stakeholders alike.
         </p>
       </div>
     </div>
@@ -683,7 +707,7 @@ const Footer = () => (
       <div className="md:col-span-3">
         <div className="text-xs uppercase tracking-wider text-white/40">Company</div>
         <ul className="mt-4 space-y-2 text-sm">
-          <li><a href="#vision" className="hover:text-brand">Vision & Mission</a></li>
+          <li><a href="#vision" className="hover:text-brand">Vision, Mission & Ethics</a></li>
           <li><a href="#contact" className="hover:text-brand">Contact</a></li>
           <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
           <li><Link to="/terms" className="hover:text-brand">Terms</Link></li>
