@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   ScanLine, QrCode, FileText, Wallet, Sparkles, ArrowRight, Check,
   Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake,
+  Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,306 @@ const Pill = ({ children, dark = false }) => (
     }`}
   >{children}</span>
 );
+
+/* ------------------------------------------------------------------
+   PhoneShowcase — animated mobile app preview in a phone frame.
+   Auto-cycles through 4 app screens with a smooth tilt + slide motion.
+------------------------------------------------------------------- */
+const ScreenBill = () => (
+  <div className="absolute inset-0 bg-white flex flex-col">
+    <div className="bg-navy px-5 pt-5 pb-9 text-white">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] tracking-[0.3em] text-lime/80">WALLET</span>
+        <Wallet className="w-3.5 h-3.5 text-lime" />
+      </div>
+      <div className="font-mono text-3xl mt-1.5">₹ 248.00</div>
+      <div className="text-[10px] text-white/50 mt-1">Available balance</div>
+    </div>
+    <div className="-mt-5 px-3.5 space-y-2 flex-1 overflow-hidden">
+      {[
+        { l: 'Roti', q: 3, p: 15, e: '🫓' },
+        { l: 'Dal Tadka', q: 1, p: 50, e: '🍛' },
+        { l: 'Rice', q: 1, p: 50, e: '🍚' },
+        { l: 'Sabji', q: 1, p: 60, e: '🥘' },
+      ].map((i) => (
+        <div key={i.l} className="bg-white border border-soft rounded-xl px-3 py-2 flex items-center gap-2.5">
+          <div className="w-7 h-7 grid place-items-center bg-lime/15 rounded-lg text-sm">{i.e}</div>
+          <div className="flex-1">
+            <div className="text-xs font-semibold text-navy">{i.l}</div>
+            <div className="text-[9px] text-slate-400 font-mono">QTY × {i.q}</div>
+          </div>
+          <div className="font-mono text-xs text-navy">₹{i.p * i.q}</div>
+        </div>
+      ))}
+      <div className="px-3 py-2.5 bg-lime rounded-xl flex items-center justify-between">
+        <span className="text-[10px] font-bold tracking-wider text-navy">TOTAL</span>
+        <span className="font-mono font-bold text-navy text-sm">₹ 175.00</span>
+      </div>
+    </div>
+  </div>
+);
+
+const ScreenAIDetect = () => (
+  <div className="absolute inset-0 bg-[#0A1128] flex flex-col text-white">
+    <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-white/10">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-lime" />
+        <span className="text-[10px] tracking-[0.2em] uppercase font-semibold">AI Snap</span>
+      </div>
+      <span className="text-[9px] text-lime/70 font-mono">DETECTING…</span>
+    </div>
+    <div className="relative flex-1 m-3 rounded-2xl overflow-hidden bg-gradient-to-br from-amber-900/60 to-red-900/60 border border-white/10">
+      <img
+        src="https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400"
+        alt="thali"
+        className="absolute inset-0 w-full h-full object-cover opacity-90"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+      {/* AI scan lines */}
+      <motion.div
+        className="absolute left-0 right-0 h-[2px] bg-lime shadow-[0_0_12px_2px_rgba(212,255,0,0.7)]"
+        animate={{ top: ['10%', '90%', '10%'] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      {/* detection boxes */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.3 }}
+        className="absolute top-[18%] left-[12%] w-10 h-8 border-2 border-lime rounded"
+      >
+        <span className="absolute -top-4 left-0 text-[8px] font-mono bg-lime text-navy px-1 rounded-sm">Roti</span>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.6 }}
+        className="absolute top-[40%] right-[18%] w-12 h-10 border-2 border-lime rounded"
+      >
+        <span className="absolute -top-4 right-0 text-[8px] font-mono bg-lime text-navy px-1 rounded-sm">Dal</span>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.9 }}
+        className="absolute bottom-[22%] left-[28%] w-12 h-9 border-2 border-lime rounded"
+      >
+        <span className="absolute -top-4 left-0 text-[8px] font-mono bg-lime text-navy px-1 rounded-sm">Sabji</span>
+      </motion.div>
+    </div>
+    <div className="px-4 pb-4 pt-2">
+      <div className="flex items-center justify-between text-[10px] mb-2">
+        <span className="text-white/60">3 items found</span>
+        <span className="text-lime font-mono">98% match</span>
+      </div>
+      <div className="bg-lime text-navy rounded-xl py-2.5 text-center text-xs font-bold">
+        <Camera className="w-3.5 h-3.5 inline -mt-0.5 mr-1" /> Confirm & Continue
+      </div>
+    </div>
+  </div>
+);
+
+const ScreenUPIScan = () => (
+  <div className="absolute inset-0 bg-[#0A1128] flex flex-col text-white">
+    <div className="px-4 pt-4 pb-3 flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        <QrCode className="w-3.5 h-3.5 text-lime" />
+        <span className="text-[10px] tracking-[0.2em] uppercase font-semibold">Scan UPI QR</span>
+      </div>
+      <span className="text-[9px] text-white/40 font-mono">STEP 2 / 3</span>
+    </div>
+    <div className="px-3 text-center">
+      <div className="text-[10px] text-white/50">Paying to</div>
+      <div className="font-display font-bold text-sm mt-0.5">Sharma Restaurant</div>
+      <div className="font-mono text-lime text-lg mt-1">₹ 175.00</div>
+    </div>
+    <div className="relative flex-1 m-3 rounded-2xl overflow-hidden bg-black border border-white/10 grid place-items-center">
+      {/* QR mock */}
+      <div className="w-32 h-32 bg-white rounded-lg p-2 relative">
+        <div className="grid grid-cols-8 grid-rows-8 gap-[2px] w-full h-full">
+          {Array.from({ length: 64 }).map((_, i) => (
+            <div key={i} className={`${[0,1,6,7,8,9,14,15,16,22,23,40,41,46,47,48,49,54,55,56,57,62,63,18,28,35,42,53,33,20,11,4,5,12,19,26,27,34,43,50,51,58,59,38,29,21,13,30,37,44].includes(i) ? 'bg-navy' : 'bg-white'} rounded-[1px]`} />
+          ))}
+        </div>
+        {/* finder squares */}
+        <div className="absolute top-2 left-2 w-5 h-5 border-[3px] border-navy rounded-sm" />
+        <div className="absolute top-2 right-2 w-5 h-5 border-[3px] border-navy rounded-sm" />
+        <div className="absolute bottom-2 left-2 w-5 h-5 border-[3px] border-navy rounded-sm" />
+      </div>
+      {/* scanning corner brackets */}
+      <div className="absolute top-6 left-6 w-6 h-6 border-l-2 border-t-2 border-lime" />
+      <div className="absolute top-6 right-6 w-6 h-6 border-r-2 border-t-2 border-lime" />
+      <div className="absolute bottom-6 left-6 w-6 h-6 border-l-2 border-b-2 border-lime" />
+      <div className="absolute bottom-6 right-6 w-6 h-6 border-r-2 border-b-2 border-lime" />
+      {/* scan line */}
+      <motion.div
+        className="absolute left-8 right-8 h-[2px] bg-lime shadow-[0_0_12px_2px_rgba(212,255,0,0.7)]"
+        animate={{ top: ['15%', '85%', '15%'] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </div>
+    <div className="px-4 pb-4 grid grid-cols-3 gap-1.5">
+      {['GPay', 'PhonePe', 'Paytm'].map((a) => (
+        <div key={a} className="bg-white/5 border border-white/10 rounded-lg py-1.5 text-center text-[9px] font-semibold">{a}</div>
+      ))}
+    </div>
+  </div>
+);
+
+const ScreenInvoice = () => (
+  <div className="absolute inset-0 bg-white flex flex-col">
+    <div className="bg-lime px-4 pt-5 pb-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[9px] tracking-[0.3em] font-bold text-navy">INVOICE</div>
+          <div className="font-display font-bold text-navy text-base mt-0.5">Bill #B4P-8421</div>
+        </div>
+        <motion.div
+          initial={{ scale: 0, rotate: -45 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
+          className="w-9 h-9 rounded-full bg-navy grid place-items-center"
+        >
+          <CheckCircle2 className="w-5 h-5 text-lime" />
+        </motion.div>
+      </div>
+    </div>
+    <div className="px-4 pt-3 pb-2 border-b border-soft">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-[9px] text-slate-500">
+          <MapPin className="w-3 h-3" /> Indore, MP
+        </div>
+        <div className="text-[9px] font-mono text-slate-500">2026-02-28 14:32</div>
+      </div>
+      <div className="mt-1.5">
+        <div className="text-[9px] text-slate-400 uppercase tracking-wider">Merchant</div>
+        <div className="text-xs font-semibold text-navy">Sharma Restaurant</div>
+        <div className="text-[9px] text-slate-400 font-mono">sharma@paytm</div>
+      </div>
+    </div>
+    <div className="px-4 py-2 flex-1 space-y-1">
+      {[
+        { l: 'Roti × 3', p: 45 },
+        { l: 'Dal Tadka', p: 50 },
+        { l: 'Rice', p: 50 },
+        { l: 'Sabji', p: 30 },
+      ].map((i) => (
+        <div key={i.l} className="flex items-center justify-between text-[10px] py-1 border-b border-dashed border-slate-200">
+          <span className="text-navy">{i.l}</span>
+          <span className="font-mono text-navy">₹{i.p}</span>
+        </div>
+      ))}
+      <div className="flex items-center justify-between pt-2 mt-1">
+        <span className="text-[10px] font-bold tracking-wider text-navy">TOTAL</span>
+        <span className="font-mono font-bold text-navy">₹ 175.00</span>
+      </div>
+    </div>
+    <div className="px-4 pb-4 grid grid-cols-2 gap-2">
+      <div className="bg-white border border-navy rounded-lg py-2 text-center text-[9px] font-bold text-navy">
+        <Download className="w-3 h-3 inline -mt-0.5 mr-1" /> PDF
+      </div>
+      <div className="bg-navy rounded-lg py-2 text-center text-[9px] font-bold text-lime">
+        <Send className="w-3 h-3 inline -mt-0.5 mr-1" /> Send
+      </div>
+    </div>
+  </div>
+);
+
+const PHONE_SCREENS = [
+  { key: 'bill', label: 'Itemised bill', el: <ScreenBill /> },
+  { key: 'ai', label: 'AI item scan', el: <ScreenAIDetect /> },
+  { key: 'upi', label: 'UPI QR pay', el: <ScreenUPIScan /> },
+  { key: 'invoice', label: 'PDF invoice', el: <ScreenInvoice /> },
+];
+
+const PhoneShowcase = () => {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setActive((a) => (a + 1) % PHONE_SCREENS.length), 3200);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="relative mx-auto w-[280px] sm:w-[300px] lg:w-[320px]" data-testid="hero-phone-showcase">
+      {/* ambient glow */}
+      <motion.div
+        className="absolute -inset-10 rounded-[3rem] bg-lime/15 blur-3xl"
+        animate={{ opacity: [0.4, 0.7, 0.4] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* floating accent pill — left */}
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.5 }}
+        className="absolute -left-8 top-16 z-20 hidden sm:flex items-center gap-1.5 bg-white text-navy px-3 py-1.5 rounded-full shadow-xl border border-soft"
+      >
+        <Sparkles className="w-3.5 h-3.5 text-brand" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">AI Detected</span>
+      </motion.div>
+
+      {/* floating accent pill — right */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.7 }}
+        className="absolute -right-6 bottom-24 z-20 hidden sm:flex items-center gap-1.5 bg-lime text-navy px-3 py-1.5 rounded-full shadow-xl"
+      >
+        <IndianRupee className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">₹5 = 1 Bill</span>
+      </motion.div>
+
+      {/* phone frame — tilted */}
+      <motion.div
+        animate={{ rotate: [-3, -1.5, -3] }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+        className="relative"
+      >
+        <div className="relative bg-[#0F1740] border border-white/10 rounded-[2.4rem] p-2.5 shadow-2xl">
+          {/* notch */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-5 bg-black rounded-full z-30" />
+
+          <div className="relative bg-white rounded-[2rem] overflow-hidden aspect-[9/19]">
+            {PHONE_SCREENS.map((s, i) => (
+              <motion.div
+                key={s.key}
+                initial={false}
+                animate={{
+                  opacity: i === active ? 1 : 0,
+                  y: i === active ? 0 : i < active ? -30 : 30,
+                  scale: i === active ? 1 : 0.96,
+                }}
+                transition={{ duration: 0.6, ease: 'easeInOut' }}
+                className="absolute inset-0"
+                style={{ pointerEvents: i === active ? 'auto' : 'none' }}
+              >
+                {s.el}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* progress dots */}
+      <div className="mt-5 flex items-center justify-center gap-2">
+        {PHONE_SCREENS.map((s, i) => (
+          <button
+            key={s.key}
+            onClick={() => setActive(i)}
+            data-testid={`phone-dot-${s.key}`}
+            className="relative h-1.5 rounded-full transition-all"
+            style={{ width: i === active ? 28 : 8, background: i === active ? '#D4FF00' : 'rgba(255,255,255,0.25)' }}
+            aria-label={s.label}
+          />
+        ))}
+      </div>
+      <div className="mt-2 text-center text-[10px] uppercase tracking-[0.25em] text-white/40 font-semibold">
+        {PHONE_SCREENS[active].label}
+      </div>
+    </div>
+  );
+};
 
 const Hero = () => {
   const nav = useNavigate();
@@ -78,40 +379,7 @@ const Hero = () => {
             transition={{ duration: 0.7, ease: 'easeOut' }}
             className="lg:col-span-5 relative"
           >
-            <div className="relative mx-auto w-[280px] sm:w-[320px] rotate-[-3deg]">
-              <div className="absolute -inset-6 rounded-[2.5rem] bg-lime/10 blur-2xl" />
-              <div className="relative bg-[#0F1740] border border-white/10 rounded-[2.2rem] p-3 shadow-2xl">
-                <div className="bg-white rounded-[1.8rem] overflow-hidden">
-                  <div className="bg-navy px-5 pt-6 pb-10 text-white">
-                    <div className="text-[10px] tracking-[0.3em] text-lime/80">WALLET BALANCE</div>
-                    <div className="font-mono text-4xl mt-1.5">₹ 248.00</div>
-                  </div>
-                  <div className="-mt-6 px-4 space-y-2.5">
-                    {[
-                      { l: 'Roti', q: 3, p: 15 },
-                      { l: 'Dal', q: 1, p: 50 },
-                      { l: 'Rice', q: 1, p: 50 },
-                      { l: 'Sabji', q: 1, p: 60 },
-                    ].map((i) => (
-                      <div key={i.l} className="bg-white border border-soft rounded-xl px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-navy">{i.l}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">QTY × {i.q}</div>
-                        </div>
-                        <div className="font-mono text-sm text-navy">₹{i.p * i.q}</div>
-                      </div>
-                    ))}
-                    <div className="px-4 py-3 bg-lime rounded-xl flex items-center justify-between">
-                      <span className="text-xs font-bold tracking-wider text-navy">TOTAL</span>
-                      <span className="font-mono font-bold text-navy">₹ 175.00</span>
-                    </div>
-                    <button className="w-full bg-navy text-white rounded-xl py-3 text-sm font-semibold mb-3">
-                      Pay Now via UPI
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <PhoneShowcase />
           </motion.div>
         </div>
       </Section>
