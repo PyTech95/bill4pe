@@ -24,6 +24,19 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-06-03 (UX polish batch)
+- **Tagline updated** to "An Intelligent Billing" — visible as the pill on Landing (`Landing.jsx`) and as the sub-title on every generated PDF (`server.py`).
+- **Splash AI tool order swapped** — Receipt OCR scanner now appears first, Voice (Whisper) expense entry second (`Splash.jsx`).
+- **Date+time everywhere** — Dashboard recent expenses, Reports page (Expenses tab + Reports tab), single-bill PDF header, multi-bill report PDF header, and Items table now show `YYYY-MM-DD HH:MM` instead of just `YYYY-MM-DD`. (`Dashboard.jsx`, `Reports.jsx`, `server.py`)
+- **Cash payment mode** added to PayNow:
+  - New Payment Mode toggle ("UPI / QR" vs "Cash") with `data-testid=paymode-upi-btn` / `paymode-cash-btn`.
+  - Scanner stage now has a "Pay in Cash" shortcut (`data-testid=pay-cash-skip-btn`) that bypasses QR scanning.
+  - In Cash mode: UPI ID becomes optional, UPI app picker card is hidden, transaction ID becomes "Receipt # (optional)", confirm button reads "Mark Cash Paid".
+  - Backend `PaymentInfo.payment_method` documents the new "Cash" value; merchant_upi & transaction_id remain Optional so Cash submissions validate cleanly.
+  - PDF "Payment Method" row reflects "Cash" correctly.
+- Backend regression: 41/42 pytest pass (`/app/backend/tests/test_bill4pe_v2.py`) — Cash E2E, GSTIN auto-print, PDF date+time, tagline, voice/receipt endpoints all verified. Single failure is a pre-existing missing-fixture (`/tmp/thali.jpg`), not a code regression.
+
+
 ## What's Been Implemented — 2026-02-28 (PayNow UPI app picker)
 - Replaced single generic "Pay via UPI App" button (which silently opened only the default UPI app — typically WhatsApp Pay on Android) with a 2-column app picker grid in `PayNow.jsx`.
 - User now explicitly chooses: Google Pay (`tez://upi/pay`), PhonePe (`phonepe://pay`), Paytm (`paytmmp://pay`), BHIM (`bhim://upi/pay`), Amazon Pay (`amazonpay://upi/pay`), WhatsApp (`whatsapp://pay`), or Other UPI (`upi://pay` Android chooser).
