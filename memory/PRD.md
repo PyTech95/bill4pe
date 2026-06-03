@@ -24,6 +24,12 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-02-28 (Testing debt cleared)
+- Ran `testing_agent_v3_fork` for full regression on the UX polish batch (tagline, splash reorder, datetime, Cash mode).
+- **Backend**: 16/16 pytest pass on `/app/backend/tests/test_bill4pe_v2.py` — Phone OTP, auth/me, referrals, Cash payment_method E2E, PDF date+time, PDF tagline "Intelligent Billing", Reports CRUD+PDF, scan-receipt route, voice/expense route, GSTIN auto-print.
+- **Frontend**: 100% on tested flows — Landing tagline, Phone OTP login (9999999999 / 123456) → /app, Splash shows 6 categories + VoiceExpense adjacent to ReceiptScan, Dashboard datetime `YYYY-MM-DD HH:MM`, Food/Travel/Hotel subcategory pages render expected fields.
+- No critical bugs. Minor optional items logged in ROADMAP (route aliases, referral validate contract, Login default mode).
+
 ## What's Been Implemented — 2026-06-03 (UX polish batch)
 - **Tagline updated** to "An Intelligent Billing" — visible as the pill on Landing (`Landing.jsx`) and as the sub-title on every generated PDF (`server.py`).
 - **Splash AI tool order swapped** — Receipt OCR scanner now appears first, Voice (Whisper) expense entry second (`Splash.jsx`).
