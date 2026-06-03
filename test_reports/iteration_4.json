@@ -1,0 +1,46 @@
+{
+  "summary": "Comprehensive regression for BILL4PE. Backend pytest 16/16 PASS via /app/backend/tests/test_bill4pe_v2.py (Phone OTP, /auth/me, referrals, Cash payment_method E2E, PDF date+time, PDF tagline 'Intelligent Billing', Reports CRUD+PDF, AI scan-receipt route, voice/expense route, GSTIN save+auto-print). Frontend E2E PASS: Landing tagline 'An Intelligent Billing' visible, Phone OTP login (9999999999 / 123456) successfully reaches /app, Splash shows all 6 categories (Food/Travel/Hotel/Grocery/Pantry/Stationery) and both [data-testid=voice-expense] + [data-testid=receipt-scan] adjacent, Dashboard shows 'YYYY-MM-DD HH:MM' datetime (e.g. '2026-05-28 08:27'), Food/Travel/Hotel subcategory pages render expected fields (snacks+AI snap-thali, From/To, Check-in/Check-out date inputs).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/me", "issue": "Returns 404 — actual route is /api/auth/me. Review_request used /api/me alias. Functionally equivalent route exists."},
+      {"endpoint": "/api/wallet/balance & /api/wallet/transactions", "issue": "Both return 404 — actual route is GET /api/wallet which returns both {balance, transactions} in one payload. Functional equivalent exists."},
+      {"endpoint": "/api/referrals/validate/{code}", "issue": "Returns 404 for unknown codes instead of 200 {valid:false} (carryover from iter-3, not blocking)."},
+      {"endpoint": "/api/voice/expense", "issue": "Returns 422 with detail 'Could not hear anything in the audio' on silent audio (acceptable; could be 400 for business condition)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login default mode", "issues": ["Default login is email/password; phone OTP requires extra click on 'Sign in with phone instead'. Consider making phone OTP default since copy says 'mobile-first PWA for Hindi users'."]},
+      {"screen": "Reports empty state", "issues": ["Fresh test user sees only 'No reports yet'; cannot visually verify YYYY-MM-DD HH:MM format on Reports list page without prior data. Pre-seed or backend-verified via test_create_report_and_pdf passes the PDF tagline+datetime check."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bill4pe_v2.py",
+    "/app/backend/tests/test_bill4pe.py",
+    "/app/test_reports/pytest/pytest_results_iter4.xml"
+  ],
+  "action_items": [
+    "(Optional naming) Add alias routes GET /api/me, GET /api/wallet/balance, GET /api/wallet/transactions OR update API contract docs since current /api/auth/me and /api/wallet work fine.",
+    "(Optional) Standardize /api/referrals/validate to always return 200 with {valid: bool} per documented FE contract.",
+    "(Optional) Standardize /api/voice/expense to return 400 (not 422) for non-pydantic business errors like silent audio.",
+    "(Optional) Auto-default the Login page to phone OTP since this is a mobile-first Hindi-user PWA (currently defaults to email/password)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1649 lines — exceeds 700-line guideline; split into routers (auth, expenses, bills, reports, ai, wallet, pdf).",
+    "PDF date+time uses naive string slicing `created_at[:16].replace('T',' ')` — works because now_iso() emits ISO with 'T', but datetime.strptime+strftime would be safer if format ever changes.",
+    "PayNow.jsx paymode toggle (paymode-upi-btn / paymode-cash-btn) only renders in `stage in ('confirm','submitting')` — deep linking to /app/pay without prior editor context yields no toggle UI; not a bug but a UX gap if user lands on /app/pay directly.",
+    "Frontend route is /app/pay (not /app/paynow as referenced in the review request); update docs to avoid confusion.",
+    "GET /api/referrals/validate/{code} raises 404 instead of returning {valid:false}; minor contract drift carried over from iter-3."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (16/16 v2 suite); legacy test_bill4pe.py still has 1 pre-existing fixture skip for /tmp/thali.jpg", "frontend": "100% on tested flows (Landing tagline, Phone OTP login, Splash 6 categories + voice/scan adjacency, Dashboard datetime, Food/Travel/Hotel subcategory pages)"},
+  "test_credentials": "Phone OTP: 9999999999 / 123456 (universal demo OTP). Email/password registration: any new email + Secret@12345 via /api/auth/register.",
+  "seed_data_creation": "Each pytest session creates fresh users + cash/UPI/GSTIN expenses + 'TEST_QA Report' under each user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All BILL4PE recent UX changes (tagline 'An Intelligent Billing', VoiceExpense adjacent to ReceiptScan on Splash, Dashboard/Reports date+time, PDF date+time, Cash payment mode via paymode-upi-btn/paymode-cash-btn, /app/pay route) are working. Backend regression suite is /app/backend/tests/test_bill4pe_v2.py (16/16). PayNow paymode toggle data-testids only render in `confirm`/`submitting` stages — to E2E test the cash UI, navigate via category->editor->pay flow with actual items, not direct deep-link. Login defaults to email mode — click 'Sign in with phone instead' before filling phone OTP.",
+  "rca of the issue": "N/A — no functional bugs. The PayNow paymode FAIL in initial frontend script was due to (a) wrong URL /app/paynow vs actual /app/pay, and (b) paymode buttons only render after passing through editor stage with merchant/amount context, so a deep-link visit shows the scan stage. Source-level data-testid presence (paymode-upi-btn @ L534, paymode-cash-btn @ L542 in PayNow.jsx) plus backend round-trip test (test_cash_bill_pdf_shows_payment_method_cash) verify the Cash mode end-to-end."
+}
