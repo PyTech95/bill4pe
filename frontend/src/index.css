@@ -5,39 +5,41 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-    --navy-dark: #050816;
-    --navy-light: #0F1631;
-    --brand: #1F6FEB;
-    --brand-hover: #1858CC;
-    --brand-soft: #2563EB;
-    --lime: #D4FF00;
+    /* BILL4PE — Paytm-style fintech palette (deep navy + electric sky) */
+    --navy-dark: #002E6E;     /* Paytm signature navy */
+    --navy-light: #003D8F;
+    --brand: #002970;         /* primary dark blue */
+    --brand-hover: #001F5C;
+    --brand-soft: #1F6FEB;    /* secondary vivid blue accent */
+    --brand-sky: #00BAF2;     /* Paytm electric sky highlight */
+    --lime: #D4FF00;          /* preserved for highlight surprise */
     --lime-hover: #BCE300;
     --white: #FFFFFF;
-    --off-white: #F4F5F7;
+    --off-white: #F4F6FA;
     --slate: #64748B;
-    --border-gray: #E2E8F0;
+    --border-gray: #E5EAF2;
 
-    /* shadcn variables remapped to BILL4PE palette */
+    /* shadcn variables remapped to Paytm-fintech palette */
     --background: 0 0% 100%;
-    --foreground: 226 60% 6%;
+    --foreground: 219 100% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 226 60% 6%;
+    --card-foreground: 219 100% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 226 60% 6%;
-    --primary: 220 85% 52%;
+    --popover-foreground: 219 100% 12%;
+    --primary: 218 100% 22%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 226 60% 10%;
-    --muted: 220 14% 96%;
+    --secondary: 220 30% 96%;
+    --secondary-foreground: 218 100% 14%;
+    --muted: 220 30% 96%;
     --muted-foreground: 215 16% 47%;
-    --accent: 220 85% 52%;
+    --accent: 218 100% 22%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 220 85% 52%;
-    --radius: 0.75rem;
+    --border: 220 25% 92%;
+    --input: 220 25% 92%;
+    --ring: 218 100% 22%;
+    --radius: 1rem;
 }
 
 * {
