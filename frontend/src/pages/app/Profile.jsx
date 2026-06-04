@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Lock, LogOut, Trash2, Loader2, Save, Gift, ChevronRight } from 'lucide-react';
+import { User, Mail, Phone, Lock, LogOut, Trash2, Loader2, Save, Gift, ChevronRight, Building2, FileBadge } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +17,8 @@ export default function Profile() {
   const { user, logout, refreshUser } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone?.replace('+91', '') || '');
+  const [gstin, setGstin] = useState(user?.gstin || '');
+  const [company, setCompany] = useState(user?.company_name || '');
   const [saving, setSaving] = useState(false);
   const [pwd, setPwd] = useState({ current: '', next: '' });
   const [changing, setChanging] = useState(false);
@@ -25,13 +27,15 @@ export default function Profile() {
     if (user) {
       setName(user.name || '');
       setPhone((user.phone || '').replace('+91', ''));
+      setGstin(user.gstin || '');
+      setCompany(user.company_name || '');
     }
   }, [user]);
 
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await api.put('/auth/me', { name, phone });
+      await api.put('/auth/me', { name, phone, gstin, company_name: company });
       await refreshUser();
       toast.success('Profile updated');
     } catch (err) {
@@ -110,6 +114,26 @@ export default function Profile() {
                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                    className="pl-12 h-11 rounded-xl border-soft font-mono" data-testid="profile-phone-input" />
           </div>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Company name (B2B, optional)</label>
+          <div className="relative mt-1">
+            <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input value={company} onChange={(e) => setCompany(e.target.value)}
+                   placeholder="e.g. Acme Pvt Ltd"
+                   className="pl-10 h-11 rounded-xl border-soft" data-testid="profile-company-input" />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">GSTIN (optional, prints on invoice)</label>
+          <div className="relative mt-1">
+            <FileBadge className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input value={gstin} maxLength={15}
+                   onChange={(e) => setGstin(e.target.value.toUpperCase().slice(0, 15))}
+                   placeholder="27ABCDE1234F1Z5"
+                   className="pl-10 h-11 rounded-xl border-soft font-mono uppercase" data-testid="profile-gstin-input" />
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1">15-char GSTIN. Leave blank if not a B2B user.</div>
         </div>
         <Button
           onClick={saveProfile} disabled={saving}

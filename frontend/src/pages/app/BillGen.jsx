@@ -4,7 +4,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Download, Share2, CheckCircle2, FileText, Loader2, Wallet, Sparkles } from 'lucide-react';
+import { Download, Share2, CheckCircle2, FileText, Loader2, Wallet, Sparkles, MessageCircle, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { API } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -56,6 +56,19 @@ export default function BillGen() {
       navigator.clipboard?.writeText(url);
       toast.success('Invoice link copied');
     }
+  };
+
+  const shareWhatsApp = () => {
+    const url = pdfUrl();
+    const msg = `BILL4PE Invoice ${expense?.bill_id || ''}\nAmount: ₹${Number(expense?.total || 0).toFixed(2)}\nMerchant: ${pay.merchant_name || '—'}\n\nView / Download: ${url}\n\n— Sent via BILL4PE · An Intelligent Billing`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const shareEmail = () => {
+    const url = pdfUrl();
+    const subject = `Reimbursement Invoice ${expense?.bill_id || ''} — ₹${Number(expense?.total || 0).toFixed(2)}`;
+    const body = `Hi,\n\nPlease find my expense invoice attached.\n\nBill ID: ${expense?.bill_id || ''}\nMerchant: ${pay.merchant_name || '—'}\nAmount: ₹${Number(expense?.total || 0).toFixed(2)}\nTransaction ID: ${pay.transaction_id || '—'}\n\nDownload / verify: ${url}\n\nThanks,\n${user?.name || ''}\n\n— Sent via BILL4PE · bill4pe.com`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   if (!expense) return <div className="py-10 text-center text-slate-400">Loading...</div>;
@@ -187,6 +200,22 @@ export default function BillGen() {
           >
             <Share2 className="w-4 h-4" /> Share
           </button>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={shareWhatsApp}
+              className="press-down h-12 rounded-full font-semibold flex items-center justify-center gap-2 bg-[#25D366] text-white hover:brightness-95"
+              data-testid="share-whatsapp-btn"
+            >
+              <MessageCircle className="w-4 h-4" /> WhatsApp
+            </button>
+            <button
+              onClick={shareEmail}
+              className="press-down h-12 rounded-full font-semibold flex items-center justify-center gap-2 bg-white border-2 border-navy text-navy"
+              data-testid="share-email-btn"
+            >
+              <Mail className="w-4 h-4" /> Email
+            </button>
+          </div>
           <button
             onClick={() => nav('/app/dashboard')}
             className="w-full h-12 text-slate-500 underline text-sm"

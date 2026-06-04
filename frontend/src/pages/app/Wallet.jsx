@@ -53,6 +53,9 @@ export default function Wallet() {
           <div className="font-mono text-4xl font-bold mt-3" data-testid="wallet-balance">
             ₹ {data.balance.toFixed(2)}
           </div>
+          <div className="text-[11px] text-white/60 mt-1.5 leading-snug">
+            Prepaid pool · auto-adjusted against ₹5 convenience fee per generated bill. New users get ₹50 free credit.
+          </div>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <button

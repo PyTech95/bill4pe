@@ -204,3 +204,23 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - Files touched: `frontend/src/index.css`, `frontend/src/pages/Landing.jsx` (Vision/Mission/Ethics + marquee + Contact "Ujjwal"), `frontend/src/lib/categories.js` (auto icon for travel), `frontend/src/components/ReceiptScan.jsx` (Rescan button reorder), `frontend/src/pages/app/Splash.jsx`.
 - Regression run via `testing_agent_v3_fork` → **iteration_5.json — 100% pass on all 13 verification points** (Landing theme, Phone OTP login, Splash home, Food/Travel/Hotel sub-category pages, Dashboard date-time format, Wallet, PayNow render, bottom-nav, zero React errors).
 - Minor cosmetic notes (non-blocking) flagged for future polish: Landing.jsx is 750 lines — candidate for component split (Hero/HowItWorks/Features/VisionMission/UseCases/Contact/Footer).
+
+
+## Update — Feb 2026 (P1 PDF Bill upgrade + GSTIN + Wallet copy — DONE)
+- **PDF Bill upgrade (P1) — VERIFIED via curl + pdfplumber on live preview-generated bill:**
+  - Bill ID format: `B4P-YYYYMMDD-XXXXXX` (e.g. `B4P-20260604-9C17A4`). ✓
+  - Tagline below logo: `An Intelligent Billing — Scan QR to verify authenticity`. ✓
+  - QR code on every PDF (verify URL `/api/bills/verify/{bill_id}`). ✓
+  - GSTIN + Company Name auto-print in "BILLED TO" when set. ✓
+- **Share options (P1) — NEW** in `frontend/src/pages/app/BillGen.jsx`:
+  - WhatsApp share button (`share-whatsapp-btn`) opens `wa.me` with pre-filled invoice message + link.
+  - Email share button (`share-email-btn`) opens `mailto:` with subject + body containing Bill ID, amount, txn ID, download link.
+- **GSTIN field in Profile (P2) — NEW** in `frontend/src/pages/app/Profile.jsx`:
+  - Added Company name + GSTIN inputs (auto-uppercase, 15-char limit) wired to `PUT /api/auth/me`. End-to-end verified.
+- **Wallet credit clarification (P2)** — added explanatory line in `Wallet.jsx`: *"Prepaid pool · auto-adjusted against ₹5 convenience fee per generated bill. New users get ₹50 free credit."*
+
+## Still pending
+- P1: Refactor `server.py` (~1650 lines) into `routers/{auth,expenses,ai,pdf,wallet}.py`.
+- P1: "Forward to Manager" via Resend — blocked on API key.
+- P2: "Quick Re-stock" favourites list for Pantry/Grocery.
+- P3: Empty-state illustrations, Org/team workspaces, Razorpay real wallet top-up (blocked on keys).
