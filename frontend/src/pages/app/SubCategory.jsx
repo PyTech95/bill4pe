@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   MapPin, Plus, Trash2, ArrowRight, Camera, Loader2, Building2,
-  Sparkles, X, RefreshCw, Mic, Square, StickyNote,
+  Sparkles, X, RefreshCw, Mic, Square, StickyNote, Star, BookmarkPlus,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -81,6 +81,60 @@ export default function SubCategory() {
   const recStreamRef = useRef(null);
 
   const fileRef = useRef(null);
+
+  // Quick Re-stock favourites (only for pantry / grocery)
+  const FAV_ENABLED = cat === 'pantry' || cat === 'grocery';
+  const [favs, setFavs] = useState([]);
+  const [favsLoaded, setFavsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!FAV_ENABLED) return;
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await api.get(`/favourites?category=${encodeURIComponent(cat)}`);
+        if (active) setFavs(data?.items || []);
+      } catch { /* ignore */ }
+      finally { if (active) setFavsLoaded(true); }
+    })();
+    return () => { active = false; };
+  }, [cat, FAV_ENABLED]);
+
+  // Add a favourite into the items table (qty default 1)
+  const addFavToItems = (fav) => {
+    setItems((arr) => {
+      // If first row is empty, replace it; otherwise append
+      const firstEmpty = arr.length === 1 && !arr[0].name && Number(arr[0].quantity) === 1 && Number(arr[0].unit_price) === 0;
+      const next = { name: fav.name, quantity: 1, unit_price: Number(fav.unit_price || 0) };
+      return firstEmpty ? [next] : [...arr, next];
+    });
+    toast.success(`Added ${fav.name}`);
+  };
+
+  const removeFav = async (name) => {
+    try {
+      const { data } = await api.delete(`/favourites?category=${encodeURIComponent(cat)}&name=${encodeURIComponent(name)}`);
+      setFavs(data?.items || []);
+      toast.success('Removed from favourites');
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to remove');
+    }
+  };
+
+  // Save current items list to favourites
+  const saveCurrentToFavs = async () => {
+    const clean = items
+      .filter((i) => i.name?.trim())
+      .map((i) => ({ name: i.name.trim(), unit_price: Number(i.unit_price) || 0 }));
+    if (!clean.length) { toast.error('No items to save'); return; }
+    try {
+      const { data } = await api.post('/favourites', { category: cat, items: clean });
+      setFavs(data?.items || []);
+      toast.success(`Saved ${clean.length} to Quick Re-stock`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to save');
+    }
+  };
 
   // Capture geolocation (callable + auto on mount)
   const captureLocation = () => {
@@ -305,17 +359,71 @@ export default function SubCategory() {
         </div>
       </motion.button>
 
+      {/* Quick Re-stock favourites (pantry / grocery only) */}
+      {FAV_ENABLED && favsLoaded && favs.length > 0 && (
+        <div data-testid="quick-restock-section">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold inline-flex items-center gap-1.5">
+              <Star className="w-3 h-3 text-lime fill-lime" /> Quick Re-stock
+            </label>
+            <span className="text-[10px] text-slate-400">tap to add</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {favs.map((f) => (
+              <div
+                key={f.name}
+                data-testid={`fav-chip-${f.name}`}
+                className="press-down group inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-white border border-soft hover:border-navy/30 hover:shadow-sm transition"
+              >
+                <button
+                  type="button"
+                  onClick={() => addFavToItems(f)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy"
+                  data-testid={`fav-add-${f.name}`}
+                >
+                  <Plus className="w-3 h-3" />
+                  <span className="truncate max-w-[140px]">{f.name}</span>
+                  {f.unit_price > 0 && (
+                    <span className="font-mono text-[10px] text-slate-500">₹{Number(f.unit_price).toFixed(0)}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeFav(f.name)}
+                  className="p-1 rounded-full text-slate-300 hover:text-red-500"
+                  data-testid={`fav-remove-${f.name}`}
+                  aria-label={`Remove ${f.name} from favourites`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Items table */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">Items (manual)</label>
-          <button
-            onClick={() => fileRef.current?.click()}
-            data-testid="ai-scan-btn"
-            className="press-down inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-lime text-navy px-2 py-1 rounded-full"
-          >
-            <Sparkles className="w-3 h-3" /> Re-scan
-          </button>
+          <div className="flex items-center gap-2">
+            {FAV_ENABLED && (
+              <button
+                onClick={saveCurrentToFavs}
+                data-testid="save-to-favs-btn"
+                className="press-down inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-navy text-lime px-2 py-1 rounded-full"
+              >
+                <BookmarkPlus className="w-3 h-3" /> Save
+              </button>
+            )}
+            <button
+              onClick={() => fileRef.current?.click()}
+              data-testid="ai-scan-btn"
+              className="press-down inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-lime text-navy px-2 py-1 rounded-full"
+            >
+              <Sparkles className="w-3 h-3" /> Re-scan
+            </button>
+          </div>
         </div>
 
         <div className="flat-card overflow-hidden">
