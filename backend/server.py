@@ -155,6 +155,14 @@ class ContactMsg(BaseModel):
     email: EmailStr
     message: str
 
+class FavouriteItem(BaseModel):
+    name: str
+    unit_price: float = 0.0
+
+class FavouritesSave(BaseModel):
+    category: str
+    items: List[FavouriteItem]
+
 
 # =================== Helpers ===================
 def now_iso() -> str:
@@ -1086,7 +1094,60 @@ async def recharge(body: WalletRecharge, user=Depends(get_current_user)):
     return {"balance": new_bal}
 
 
-# =================== Bill Generation ===================
+# =================== Favourites / Quick Re-stock ===================
+FAV_ALLOWED_CATEGORIES = {"pantry", "grocery"}
+FAV_MAX_PER_CATEGORY = 20
+
+def _norm_fav_name(s: str) -> str:
+    return (s or "").strip().lower()
+
+@api.get("/favourites")
+async def list_favourites(category: str, user=Depends(get_current_user)):
+    if category not in FAV_ALLOWED_CATEGORIES:
+        raise HTTPException(400, "Favourites available only for pantry/grocery")
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "favourites": 1})
+    favs = ((u or {}).get("favourites") or {}).get(category, [])
+    favs = sorted(favs, key=lambda x: x.get("last_used", ""), reverse=True)
+    return {"category": category, "items": favs}
+
+@api.post("/favourites")
+async def save_favourites(body: FavouritesSave, user=Depends(get_current_user)):
+    if body.category not in FAV_ALLOWED_CATEGORIES:
+        raise HTTPException(400, "Favourites available only for pantry/grocery")
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "favourites": 1})
+    existing = ((u or {}).get("favourites") or {}).get(body.category, [])
+    by_name = { _norm_fav_name(it.get("name")): it for it in existing if it.get("name") }
+    ts = now_iso()
+    for it in body.items:
+        nm = (it.name or "").strip()
+        if not nm:
+            continue
+        key = _norm_fav_name(nm)
+        by_name[key] = {
+            "name": nm,
+            "unit_price": float(it.unit_price or 0.0),
+            "last_used": ts,
+        }
+    merged = sorted(by_name.values(), key=lambda x: x.get("last_used", ""), reverse=True)
+    merged = merged[:FAV_MAX_PER_CATEGORY]
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {f"favourites.{body.category}": merged}},
+    )
+    return {"category": body.category, "items": merged}
+
+@api.delete("/favourites")
+async def delete_favourite(category: str, name: str, user=Depends(get_current_user)):
+    if category not in FAV_ALLOWED_CATEGORIES:
+        raise HTTPException(400, "Favourites available only for pantry/grocery")
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "favourites": 1})
+    existing = ((u or {}).get("favourites") or {}).get(category, [])
+    filtered = [it for it in existing if _norm_fav_name(it.get("name")) != _norm_fav_name(name)]
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {f"favourites.{category}": filtered}},
+    )
+    return {"category": category, "items": filtered}
 def build_pdf_bytes(expense: dict, user: dict) -> bytes:
     user_name = (user or {}).get("name", "Customer")
     user_gstin = (user or {}).get("gstin")
