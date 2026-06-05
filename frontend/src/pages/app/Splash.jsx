@@ -226,7 +226,7 @@ export default function Splash() {
         variants={{ show: { transition: { staggerChildren: 0.025, delayChildren: 0.12 } } }}
         className="grid grid-cols-2 gap-3"
       >
-        {allCats.map(({ key, label, icon: Icon, sub }) => (
+        {allCats.map(({ key, label, icon: Icon, sub, tint, ink }) => (
           <motion.button
             key={key}
             variants={{
@@ -238,8 +238,11 @@ export default function Splash() {
             data-testid={`category-${key}-card`}
             className="press-down group flat-card p-3 text-left hover:border-navy transition-colors flex items-center gap-3"
           >
-            <div className="w-11 h-11 rounded-xl bg-[#050816] text-brand grid place-items-center shrink-0 group-hover:bg-brand group-hover:text-white transition-colors">
-              <Icon className="w-5 h-5" strokeWidth={1.8} />
+            <div
+              className="w-12 h-12 rounded-full grid place-items-center shrink-0 ring-1 ring-black/[0.04] shadow-sm transition-transform group-hover:scale-105"
+              style={{ backgroundColor: tint, color: ink }}
+            >
+              <Icon className="w-6 h-6" strokeWidth={1.9} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display font-bold text-sm text-navy truncate">{label}</div>
