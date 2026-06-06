@@ -734,30 +734,136 @@ const Footer = () => (
   </footer>
 );
 
+/* ------------------------------------------------------------------
+   MobileLanding — condensed, mobile-only landing page.
+   Shows: hero pitch + 3 key benefits + sign-in/sign-up CTAs + tiny footer.
+   Hidden on md+ screens (desktop sees the full marketing site).
+------------------------------------------------------------------- */
+const MobileLanding = () => {
+  const nav = useNavigate();
+  const { user } = useAuth();
+  return (
+    <div className="md:hidden min-h-screen bg-navy text-white relative overflow-hidden flex flex-col" data-testid="mobile-landing">
+      {/* ambient glow */}
+      <div
+        className="absolute inset-0 opacity-40 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(circle at 15% 10%, rgba(212,255,0,0.22), transparent 45%), radial-gradient(circle at 90% 75%, rgba(24,88,204,0.25), transparent 50%)',
+        }}
+      />
+
+      {/* top bar with logo */}
+      <div className="relative px-5 pt-6 pb-2 flex items-center justify-between">
+        <div className="bg-white inline-flex flex-col items-center px-2.5 py-1.5 rounded-xl" data-testid="mobile-nav-logo">
+          <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
+          <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
+        </div>
+        <Link
+          to="/login"
+          data-testid="mobile-nav-signin"
+          className="text-xs font-semibold text-white/80 hover:text-lime"
+        >
+          Sign in
+        </Link>
+      </div>
+
+      {/* hero */}
+      <div className="relative px-5 pt-8 pb-6">
+        <Pill dark><Sparkles className="w-3 h-3" /> AI Billing for India</Pill>
+        <h1 className="font-display font-bold text-4xl mt-4 tracking-tight leading-[1.05]">
+          Pay your bill.<br />
+          <span className="text-lime">Generate</span> the invoice.<br />
+          <span className="text-white/70 text-3xl">Done in 60 seconds.</span>
+        </h1>
+        <p className="mt-4 text-sm text-white/65 leading-relaxed">
+          Snap a meal. Scan a UPI QR. Get a reimbursement-ready PDF invoice — instantly.
+        </p>
+      </div>
+
+      {/* 3 key benefits */}
+      <div className="relative px-5 grid grid-cols-3 gap-2.5 mt-2">
+        {[
+          { icon: ScanLine, t: 'AI Snap', d: 'Items auto-detected' },
+          { icon: QrCode, t: 'UPI Pay', d: 'Any merchant QR' },
+          { icon: FileText, t: 'PDF Bill', d: 'Audit-ready' },
+        ].map(({ icon: Icon, t, d }) => (
+          <div key={t} className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-center">
+            <Icon className="w-5 h-5 text-lime mx-auto" strokeWidth={1.8} />
+            <div className="font-display font-bold text-[13px] mt-2.5">{t}</div>
+            <div className="text-[10px] text-white/50 mt-1 leading-tight">{d}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* trust line */}
+      <div className="relative px-5 mt-6 flex items-center justify-center gap-4 text-[10px] text-white/55">
+        <div className="flex items-center gap-1"><Check className="w-3 h-3 text-lime" /> No setup</div>
+        <div className="flex items-center gap-1"><Check className="w-3 h-3 text-lime" /> Works offline</div>
+        <div className="flex items-center gap-1"><Check className="w-3 h-3 text-lime" /> Installable PWA</div>
+      </div>
+
+      {/* spacer pushes CTAs down */}
+      <div className="flex-1" />
+
+      {/* CTAs */}
+      <div className="relative px-5 pb-6 pt-8 space-y-3">
+        <button
+          onClick={() => nav(user ? '/app' : '/register')}
+          data-testid="mobile-cta-signup"
+          className="press-down w-full inline-flex items-center justify-center gap-2 bg-lime text-navy font-bold px-6 py-4 rounded-full text-base"
+        >
+          {user ? 'Open Bill4Pe' : 'Create free account'} <ArrowRight className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => nav('/login')}
+          data-testid="mobile-cta-signin"
+          className="press-down w-full inline-flex items-center justify-center gap-2 border border-white/20 text-white font-semibold px-6 py-3.5 rounded-full text-sm hover:bg-white/5"
+        >
+          I already have an account
+        </button>
+        <p className="text-center text-[10px] text-white/40 mt-3">
+          By continuing you agree to our{' '}
+          <Link to="/terms" className="underline hover:text-lime">Terms</Link>
+          {' '}&{' '}
+          <Link to="/privacy" className="underline hover:text-lime">Privacy</Link>.
+        </p>
+        <p className="text-center text-[10px] text-white/30 mt-1">© 2026 BILL4PE · Made in India</p>
+      </div>
+    </div>
+  );
+};
+
 export default function Landing() {
   useEffect(() => { document.title = 'BILL4PE — AI Expense & Invoice Platform'; }, []);
   return (
     <div className="min-h-screen bg-white">
-      <nav className="absolute top-0 left-0 right-0 z-40">
-        <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
-          <Link to="/" data-testid="nav-logo" className="bg-white inline-flex flex-col items-center p-1.5 rounded-xl">
-            <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
-            <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
-            <Link to="/register" className="press-down px-4 py-2 rounded-full bg-lime text-navy font-semibold text-sm hover:bg-[#BCE300]" data-testid="nav-register">Get started</Link>
+      {/* Mobile-only condensed landing */}
+      <MobileLanding />
+
+      {/* Desktop / tablet full marketing site */}
+      <div className="hidden md:block">
+        <nav className="absolute top-0 left-0 right-0 z-40">
+          <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
+            <Link to="/" data-testid="nav-logo" className="bg-white inline-flex flex-col items-center p-1.5 rounded-xl">
+              <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
+              <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
+            </Link>
+            <div className="flex items-center gap-2">
+              <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
+              <Link to="/register" className="press-down px-4 py-2 rounded-full bg-lime text-navy font-semibold text-sm hover:bg-[#BCE300]" data-testid="nav-register">Get started</Link>
+            </div>
           </div>
-        </div>
-      </nav>
-      <Hero />
-      <HowItWorks />
-      <Features />
-      <VisionMission />
-      <UseCases />
-      <Testimonials />
-      <Contact />
-      <Footer />
+        </nav>
+        <Hero />
+        <HowItWorks />
+        <Features />
+        <VisionMission />
+        <UseCases />
+        <Testimonials />
+        <Contact />
+        <Footer />
+      </div>
     </div>
   );
 }
