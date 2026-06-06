@@ -685,7 +685,7 @@ const VisionMission = () => (
 
     <div className="grid md:grid-cols-3 gap-6 mt-14">
       <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-8 hover:border-brand transition-colors" data-testid="vision-card">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-brand bg-brand/10 border border-brand/20">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-white bg-brand/10 border border-brand/20">
           <Eye className="w-3 h-3" /> Our Vision
         </div>
         <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
