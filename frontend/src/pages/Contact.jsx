@@ -66,9 +66,8 @@ export default function Contact() {
       {/* top bar */}
       <header className="relative border-b border-white/10">
         <div className="max-w-5xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="bg-white inline-flex flex-col items-center p-1.5 rounded-lg" data-testid="contact-nav-logo">
-            <img src="/logo.png" alt="Bill4Pe" className="h-7 w-auto" />
-            <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
+          <Link to="/" className="bg-white inline-flex items-center p-1.5 rounded-lg" data-testid="contact-nav-logo">
+            <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-12 w-auto object-contain" />
           </Link>
           <Link
             to="/"

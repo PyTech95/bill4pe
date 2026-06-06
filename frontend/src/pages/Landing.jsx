@@ -515,7 +515,7 @@ const PhoneShowcase = () => {
             onClick={() => setActive(i)}
             data-testid={`phone-dot-${s.key}`}
             className="relative h-1.5 rounded-full transition-all"
-            style={{ width: i === active ? 28 : 8, background: i === active ? '#D4FF00' : 'rgba(255,255,255,0.25)' }}
+            style={{ width: i === active ? 28 : 8, background: i === active ? '#FFC02C' : 'rgba(255,255,255,0.25)' }}
             aria-label={s.label}
           />
         ))}
@@ -902,9 +902,8 @@ const Footer = () => (
   <footer className="bg-black text-white px-5 md:px-10 lg:px-20 py-16">
     <div className="grid md:grid-cols-12 gap-10">
       <div className="md:col-span-7">
-        <div className="bg-white inline-flex flex-col items-center p-3 rounded-2xl">
-          <img src="/logo.png" alt="Bill4Pe" className="h-16 w-auto" />
-          <span className="text-[10px] italic text-slate-500 mt-1 leading-none">An Intelligent Billing</span>
+        <div className="bg-white inline-flex items-center p-3 rounded-2xl">
+          <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-24 w-auto object-contain" />
         </div>
         <p className="mt-6 text-white/50 max-w-md">
           Pay Your Bill — AI Powered Expense & Invoice Platform.
@@ -956,9 +955,8 @@ const MobileLanding = () => {
 
       {/* top bar with logo */}
       <div className="relative px-5 pt-6 pb-2 flex items-center justify-between">
-        <div className="bg-white inline-flex flex-col items-center px-2.5 py-1.5 rounded-xl" data-testid="mobile-nav-logo">
-          <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
-          <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
+        <div className="bg-white inline-flex items-center px-2 py-1.5 rounded-xl" data-testid="mobile-nav-logo">
+          <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-12 w-auto object-contain" />
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -1055,8 +1053,8 @@ export default function Landing() {
       <div className="hidden md:block">
         <nav className="absolute top-0 left-0 right-0 z-40">
           <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
-            <Link to="/" data-testid="nav-logo" className="bg-white inline-flex flex-col items-center p-1.5 rounded-xl">
-              <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
+            <Link to="/" data-testid="nav-logo" className="bg-white inline-flex items-center p-1.5 rounded-xl">
+              <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-14 w-auto object-contain" />
             </Link>
             <div className="flex items-center gap-2">
               <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
