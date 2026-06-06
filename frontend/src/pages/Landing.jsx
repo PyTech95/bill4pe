@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   ScanLine, QrCode, FileText, Wallet, Sparkles, ArrowRight, Check,
   Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake, Scale,
-  Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils,
+  Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils, Bike, Car,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -230,9 +230,118 @@ const ScreenInvoice = () => (
   </div>
 );
 
+const ScreenAutoFare = () => (
+  <div className="absolute inset-0 bg-white flex flex-col">
+    <div className="bg-[#FFC83D] px-4 pt-5 pb-4 relative overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Car className="w-3.5 h-3.5 text-navy" />
+          <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-navy">Auto Ride</span>
+        </div>
+        <span className="text-[9px] font-mono text-navy/70">FARE · ₹</span>
+      </div>
+      <div className="font-mono font-bold text-3xl text-navy mt-1.5">₹ 184.00</div>
+      <div className="text-[10px] text-navy/70 mt-0.5">Kompally → Hitec City</div>
+      {/* moving auto silhouette */}
+      <motion.div
+        className="absolute -bottom-1 text-2xl"
+        animate={{ x: ['-20%', '110%'] }}
+        transition={{ duration: 3.4, repeat: Infinity, ease: 'linear' }}
+      >🛺</motion.div>
+    </div>
+    <div className="px-3.5 py-3 flex-1 space-y-2">
+      <div className="bg-white border border-soft rounded-xl p-3 flex items-center gap-3">
+        <div className="w-7 h-7 grid place-items-center bg-lime/20 rounded-lg"><MapPin className="w-3.5 h-3.5 text-navy" /></div>
+        <div className="flex-1">
+          <div className="text-[9px] uppercase tracking-wider text-slate-400">From</div>
+          <div className="text-xs font-semibold text-navy">Kompally, Hyderabad</div>
+        </div>
+      </div>
+      <div className="bg-white border border-soft rounded-xl p-3 flex items-center gap-3">
+        <div className="w-7 h-7 grid place-items-center bg-brand/15 rounded-lg"><MapPin className="w-3.5 h-3.5 text-brand" /></div>
+        <div className="flex-1">
+          <div className="text-[9px] uppercase tracking-wider text-slate-400">To</div>
+          <div className="text-xs font-semibold text-navy">Hitec City</div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-[10px] py-1">
+        <span className="text-slate-500">Distance · 12.4 km</span>
+        <span className="font-mono text-navy">₹ 15/km</span>
+      </div>
+    </div>
+    <div className="px-3.5 pb-4">
+      <div className="px-3 py-2.5 bg-navy rounded-xl flex items-center justify-between">
+        <span className="text-[10px] font-bold tracking-wider text-lime">FARE TOTAL</span>
+        <span className="font-mono font-bold text-lime text-sm">₹ 184.00</span>
+      </div>
+    </div>
+  </div>
+);
+
+const ScreenBikeFuel = () => (
+  <div className="absolute inset-0 bg-[#0A1128] flex flex-col text-white">
+    <div className="px-4 pt-4 pb-2 flex items-center justify-between border-b border-white/10">
+      <div className="flex items-center gap-1.5">
+        <Bike className="w-3.5 h-3.5 text-lime" />
+        <span className="text-[10px] tracking-[0.25em] uppercase font-bold">Bike · Fuel</span>
+      </div>
+      <span className="text-[9px] text-lime/80 font-mono">OCR ✓</span>
+    </div>
+    <div className="relative flex-1 m-3 rounded-2xl overflow-hidden bg-gradient-to-br from-orange-600/40 to-red-700/40 border border-white/10">
+      <img
+        src="https://images.unsplash.com/photo-1545262810-77515befe149?w=400"
+        alt="fuel pump"
+        className="absolute inset-0 w-full h-full object-cover opacity-90"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+      {/* OCR scan beam */}
+      <motion.div
+        className="absolute left-0 right-0 h-[2px] bg-lime shadow-[0_0_14px_2px_rgba(212,255,0,0.7)]"
+        animate={{ top: ['8%', '92%', '8%'] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      {/* moving bike silhouette */}
+      <motion.div
+        className="absolute bottom-3 text-2xl drop-shadow"
+        animate={{ x: ['-15%', '115%'] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+      >🏍️</motion.div>
+      {/* OCR detection chip */}
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="absolute top-3 left-3 bg-lime text-navy px-2 py-0.5 rounded-sm text-[8px] font-mono font-bold"
+      >PETROL · 2.1 L</motion.div>
+    </div>
+    <div className="px-4 pb-2 grid grid-cols-3 gap-2 text-center">
+      <div className="bg-white/5 border border-white/10 rounded-lg py-1.5">
+        <div className="text-[8px] text-white/50 uppercase tracking-wider">Litres</div>
+        <div className="font-mono text-sm text-lime">2.10</div>
+      </div>
+      <div className="bg-white/5 border border-white/10 rounded-lg py-1.5">
+        <div className="text-[8px] text-white/50 uppercase tracking-wider">Rate</div>
+        <div className="font-mono text-sm">₹104.7</div>
+      </div>
+      <div className="bg-white/5 border border-white/10 rounded-lg py-1.5">
+        <div className="text-[8px] text-white/50 uppercase tracking-wider">Total</div>
+        <div className="font-mono text-sm text-lime">₹220</div>
+      </div>
+    </div>
+    <div className="px-4 pb-4 pt-2">
+      <div className="bg-lime text-navy rounded-xl py-2.5 text-center text-xs font-bold">
+        <CheckCircle2 className="w-3.5 h-3.5 inline -mt-0.5 mr-1" /> Use as expense
+      </div>
+    </div>
+  </div>
+);
+
 const PHONE_SCREENS = [
-  { key: 'bill', label: 'Itemised bill', el: <ScreenBill /> },
-  { key: 'ai', label: 'AI item scan', el: <ScreenAIDetect /> },
+  { key: 'bill', label: 'Food · Itemised bill', el: <ScreenBill /> },
+  { key: 'ai', label: 'AI thali scan', el: <ScreenAIDetect /> },
+  { key: 'auto', label: 'Auto · Ride fare', el: <ScreenAutoFare /> },
+  { key: 'bike', label: 'Bike · Fuel slip', el: <ScreenBikeFuel /> },
   { key: 'upi', label: 'UPI QR pay', el: <ScreenUPIScan /> },
   { key: 'invoice', label: 'PDF invoice', el: <ScreenInvoice /> },
 ];
@@ -387,7 +496,7 @@ const Hero = () => {
       {/* trust strip */}
       <div className="border-t border-white/10 bg-black">
         <div className="overflow-hidden">
-          <div className="marquee py-5 text-white/40 text-xs uppercase tracking-[0.4em] font-semibold">
+          <div className="marquee py-5 text-white text-xs uppercase tracking-[0.4em] font-semibold">
             {[...Array(2)].map((_, k) => (
               <div key={k} className="flex gap-12 items-center pr-12">
                 <span>Built for India</span><span>·</span>
@@ -490,7 +599,7 @@ const VisionMission = () => (
           A leakage-free, AI-powered expense ecosystem for every corporate.
         </h3>
         <p
-          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          className="mt-5 text-white leading-[1.75] text-[13.5px] hyphens-auto"
           style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
           data-testid="vision-text"
         >
@@ -532,7 +641,7 @@ const VisionMission = () => (
           Integrity, transparency & accountability — by design.
         </h3>
         <p
-          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          className="mt-5 text-white leading-[1.75] text-[13.5px] hyphens-auto"
           style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
           data-testid="ethics-text"
         >
@@ -721,7 +830,7 @@ const Footer = () => (
         <div className="text-xs uppercase tracking-wider text-white/40">Company</div>
         <ul className="mt-4 space-y-2 text-sm">
           <li><a href="#vision" className="hover:text-brand">Vision, Mission & Ethics</a></li>
-          <li><a href="#contact" className="hover:text-brand">Contact</a></li>
+          <li><Link to="/contact" className="hover:text-brand">Contact</Link></li>
           <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
           <li><Link to="/terms" className="hover:text-brand">Terms</Link></li>
         </ul>

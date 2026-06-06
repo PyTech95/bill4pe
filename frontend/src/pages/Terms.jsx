@@ -108,9 +108,9 @@ export default function Terms() {
 
       <H2>13. Governing law</H2>
       <P>
-        These Terms are governed by the laws of India. Courts in Bengaluru, Karnataka shall
-        have exclusive jurisdiction over any disputes, subject to applicable consumer-protection
-        provisions.
+        These Terms are governed by the laws of India. Courts in Ghaziabad, Uttar Pradesh - 201010
+        shall have exclusive jurisdiction over any disputes, subject to applicable
+        consumer-protection provisions.
       </P>
 
       <H2>14. Changes</H2>
@@ -121,9 +121,15 @@ export default function Terms() {
 
       <H2>15. Contact</H2>
       <P>
-        Questions? Use the{' '}
-        <a href="/#contact" className="text-brand underline">contact form</a>{' '}
-        on our home page or email <span className="text-brand">legal@bill4pe.com</span>.
+        Questions? Visit our{' '}
+        <a href="/contact" className="text-brand underline">Contact page</a>{' '}
+        or email <span className="text-brand">legal@bill4pe.com</span>.
+      </P>
+      <P>
+        <b>Registered correspondence:</b><br />
+        Ujjwal Gupta, Plot No. 239, Second Floor, Saraswati Lane,<br />
+        Sector - 5, Vaishali, Ghaziabad, Uttar Pradesh - 201010<br />
+        Mobile: +91 70111 84609
       </P>
     </LegalLayout>
   );

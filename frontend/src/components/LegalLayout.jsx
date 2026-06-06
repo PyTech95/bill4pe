@@ -52,7 +52,7 @@ export default function LegalLayout({ title, updatedOn, children }) {
           <div className="flex gap-5 text-white/70">
             <Link to="/privacy" className="hover:text-brand">Privacy</Link>
             <Link to="/terms" className="hover:text-brand">Terms</Link>
-            <a href="/#contact" className="hover:text-brand">Contact</a>
+            <Link to="/contact" className="hover:text-brand">Contact</Link>
           </div>
         </div>
       </footer>

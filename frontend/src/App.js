@@ -7,6 +7,7 @@ import './App.css';
 import Landing from '@/pages/Landing';
 import Privacy from '@/pages/Privacy';
 import Terms from '@/pages/Terms';
+import Contact from '@/pages/Contact';
 import Login from '@/pages/auth/Login';
 import PhoneLogin from '@/pages/auth/PhoneLogin';
 import Register from '@/pages/auth/Register';
@@ -41,6 +42,7 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/login/phone" element={<PhoneLogin />} />
           <Route path="/register" element={<Register />} />
