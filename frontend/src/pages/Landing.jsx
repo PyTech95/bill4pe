@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   ScanLine, QrCode, FileText, Wallet, Sparkles, ArrowRight, Check,
   Building2, ShieldCheck, Smartphone, Send, Eye, Target, Zap, HeartHandshake, Scale,
-  Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils, Bike, Car,
+  Camera, MapPin, CheckCircle2, Download, IndianRupee, Utensils, Bike, Car, Plane, Route,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -337,9 +337,102 @@ const ScreenBikeFuel = () => (
   </div>
 );
 
+const ScreenTravelBill = () => (
+  <div className="absolute inset-0 bg-white flex flex-col">
+    {/* Header — boarding pass style */}
+    <div className="bg-navy px-4 pt-5 pb-4 relative overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Plane className="w-3.5 h-3.5 text-lime" />
+          <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-lime">Travel Bill</span>
+        </div>
+        <span className="text-[9px] font-mono text-white/50">B4P-TRV-7042</span>
+      </div>
+      {/* From → To */}
+      <div className="mt-3 flex items-end justify-between text-white">
+        <div>
+          <div className="text-[9px] text-white/50 uppercase tracking-wider">From</div>
+          <div className="font-display font-black text-2xl leading-none">DEL</div>
+          <div className="text-[9px] text-white/60 mt-0.5">Delhi · 06:40</div>
+        </div>
+        <div className="flex-1 px-2 relative">
+          <div className="border-t border-dashed border-lime/60 relative">
+            <motion.div
+              className="absolute -top-2 text-lime"
+              animate={{ x: ['-10%', '110%'] }}
+              transition={{ duration: 3.2, repeat: Infinity, ease: 'linear' }}
+            >
+              <Plane className="w-3.5 h-3.5 rotate-90" />
+            </motion.div>
+          </div>
+          <div className="text-center text-[8px] text-white/40 font-mono mt-1">2h 10m · IndiGo</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[9px] text-white/50 uppercase tracking-wider">To</div>
+          <div className="font-display font-black text-2xl leading-none">BLR</div>
+          <div className="text-[9px] text-white/60 mt-0.5">Bengaluru · 08:50</div>
+        </div>
+      </div>
+    </div>
+
+    {/* perforation */}
+    <div className="relative h-2 bg-navy">
+      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white" />
+      <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white" />
+    </div>
+
+    {/* Trip summary */}
+    <div className="px-4 pt-2.5 pb-2 border-b border-soft grid grid-cols-3 gap-2">
+      <div>
+        <div className="text-[8px] uppercase tracking-wider text-slate-400">Date</div>
+        <div className="text-[10px] font-semibold text-navy font-mono mt-0.5">28 Feb 2026</div>
+      </div>
+      <div>
+        <div className="text-[8px] uppercase tracking-wider text-slate-400">PAX</div>
+        <div className="text-[10px] font-semibold text-navy mt-0.5">1 Adult</div>
+      </div>
+      <div>
+        <div className="text-[8px] uppercase tracking-wider text-slate-400">Class</div>
+        <div className="text-[10px] font-semibold text-navy mt-0.5">Economy</div>
+      </div>
+    </div>
+
+    {/* Fare breakdown */}
+    <div className="px-4 py-2 flex-1 space-y-1">
+      {[
+        { l: 'Base fare', p: 3850 },
+        { l: 'Taxes & fees', p: 612 },
+        { l: 'Cab · Airport ↔ Office', p: 380 },
+      ].map((i) => (
+        <div key={i.l} className="flex items-center justify-between text-[10px] py-1 border-b border-dashed border-slate-200">
+          <span className="text-navy flex items-center gap-1.5">
+            <Route className="w-3 h-3 text-slate-400" /> {i.l}
+          </span>
+          <span className="font-mono text-navy">₹{i.p.toLocaleString('en-IN')}</span>
+        </div>
+      ))}
+      <div className="flex items-center justify-between pt-2 mt-1">
+        <span className="text-[10px] font-bold tracking-wider text-navy">REIMBURSE</span>
+        <span className="font-mono font-bold text-navy text-sm">₹ 4,842</span>
+      </div>
+    </div>
+
+    {/* CTA */}
+    <div className="px-4 pb-4 grid grid-cols-2 gap-2">
+      <div className="bg-white border border-navy rounded-lg py-2 text-center text-[9px] font-bold text-navy">
+        <Download className="w-3 h-3 inline -mt-0.5 mr-1" /> PDF
+      </div>
+      <div className="bg-lime rounded-lg py-2 text-center text-[9px] font-bold text-navy">
+        <Send className="w-3 h-3 inline -mt-0.5 mr-1" /> Send to HR
+      </div>
+    </div>
+  </div>
+);
+
 const PHONE_SCREENS = [
   { key: 'bill', label: 'Food · Itemised bill', el: <ScreenBill /> },
   { key: 'ai', label: 'AI thali scan', el: <ScreenAIDetect /> },
+  { key: 'travel', label: 'Travel · Flight bill', el: <ScreenTravelBill /> },
   { key: 'auto', label: 'Auto · Ride fare', el: <ScreenAutoFare /> },
   { key: 'bike', label: 'Bike · Fuel slip', el: <ScreenBikeFuel /> },
   { key: 'upi', label: 'UPI QR pay', el: <ScreenUPIScan /> },
