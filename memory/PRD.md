@@ -253,3 +253,16 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - P1: "Forward to Manager" via Resend — blocked on API key.
 - P2: "Quick Re-stock" favourites list for Pantry/Grocery.
 - P3: Empty-state illustrations, Org/team workspaces, Razorpay real wallet top-up (blocked on keys).
+
+
+
+## Update — Feb 2026 (PayNow scanner simplified to camera-only, per user request)
+- **User report:** "camera still loading only — it was working — remove cash and manual options"
+- **Root cause:** Earlier session added fallback CTAs ("Pay in Cash", "Enter UPI manually") + a 3 s aggressive watchdog that surfaced an error overlay. Combined with a `running` state that only flipped on the `playing` event (unreliable on iOS PWA standalone), users were seeing the "Starting camera…" overlay indefinitely.
+- **Fix in `/app/frontend/src/pages/app/PayNow.jsx`:**
+  - Camera now flips to `running` on ANY of: `onplaying`, `onloadeddata`, `oncanplay` — whichever browser fires first — gated by `videoWidth > 0 && videoHeight > 0`.
+  - Replaced 3 s one-shot error watchdog with a 400 ms polling interval that runs up to 6 s, automatically marking running the instant frames arrive.
+  - **Removed** "Pay in Cash" + "Enter UPI manually" buttons from the starting overlay, from the error overlay, and from the row beneath the camera. Scanner is now camera-only with a Retry/Switch-camera fallback if it truly fails.
+  - Cleaned up dead `skipScan` function + `scanSlow` state.
+- **Status:** Code shipped to preview. Production redeploy required on user side. User to verify on real mobile device.
+

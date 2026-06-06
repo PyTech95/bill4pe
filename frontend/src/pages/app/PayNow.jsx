@@ -19,7 +19,7 @@ const parseUpi = (data) => {
 
 // Detect in-app webviews that silently block getUserMedia on iOS
 const detectInAppBrowser = () => {
-  if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '', isPrivate: false };
+  if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '', isPrivate: false, isStandalonePWA: false };
   const ua = navigator.userAgent || '';
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
   const isAndroid = /Android/i.test(ua);
@@ -32,6 +32,13 @@ const detectInAppBrowser = () => {
   const isIosSuspectWebView = isIOS && !/Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
   if (!name && isIosSuspectWebView) name = 'WhatsApp / In-app browser';
   if (!name && isAndroid && /; wv\)/i.test(ua)) name = 'In-app browser';
+
+  // iOS standalone PWA mode — older iOS versions block getUserMedia entirely.
+  // Even on iOS 16.4+, some users report flaky camera in standalone mode.
+  // We surface a hint so users can open in Safari instead.
+  const isStandalonePWA =
+    (typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches) ||
+    !!(typeof navigator !== 'undefined' && navigator.standalone);
 
   // iOS Safari Private Browsing detection — Apple BLOCKS getUserMedia in private mode.
   // Heuristic: in private mode, navigator.storage.estimate() returns very low quota,
@@ -46,7 +53,7 @@ const detectInAppBrowser = () => {
       isPrivate = true;
     }
   }
-  return { isInApp: !!name, isIOS, isAndroid, name, isPrivate };
+  return { isInApp: !!name, isIOS, isAndroid, name, isPrivate, isStandalonePWA };
 };
 
 export default function PayNow() {
@@ -104,7 +111,7 @@ export default function PayNow() {
   // Stop camera + cancel rAF loop + clear watchdog
   const stopCamera = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
     if (streamRef.current) {
       try { streamRef.current.getTracks().forEach((t) => t.stop()); } catch { /* */ }
       streamRef.current = null;
@@ -318,14 +325,23 @@ export default function PayNow() {
         });
       }
     };
-    const onPlaying = () => {
+    // Mark scanner as live as soon as we have any decodable frame.
+    // Some browsers (especially iOS Safari) don't reliably fire `playing`,
+    // so we ALSO listen for `loadeddata` and `canplay` and check dimensions.
+    let markedRunning = false;
+    const markRunning = () => {
+      if (markedRunning) return;
       if (myToken !== startTokenRef.current) return;
+      if (!video.videoWidth || !video.videoHeight) return;
+      markedRunning = true;
       setScanStatus('running');
       snapshotDiag();
       startDecodeLoop();
     };
     video.onloadedmetadata = onLoadedMetadata;
-    video.onplaying = onPlaying;
+    video.onplaying = markRunning;
+    video.onloadeddata = markRunning;
+    video.oncanplay = markRunning;
 
     // FINALLY attach the stream (after attrs + listeners are wired)
     try {
@@ -355,17 +371,32 @@ export default function PayNow() {
       setCameraList(cams);
     } catch { /* */ }
 
-    // Watchdog: if after 3s we still have 0 video dimensions, surface diagnostics
-    if (watchdogRef.current) clearTimeout(watchdogRef.current);
-    watchdogRef.current = setTimeout(() => {
-      if (myToken !== startTokenRef.current) return;
-      snapshotDiag();
-      const v = videoRef.current;
-      if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
-        setScanStatus('error');
-        setScanError('Camera stream is blank. Tap Retry, switch camera, or enter UPI manually below.');
+    // Watchdog: poll for video dimensions for up to 6s. Some iOS builds simply
+    // don't fire any of the standard media events but the frames ARE available
+    // — so we periodically check and flip to running once dimensions appear.
+    if (watchdogRef.current) clearInterval(watchdogRef.current);
+    let elapsed = 0;
+    watchdogRef.current = setInterval(() => {
+      if (myToken !== startTokenRef.current) {
+        clearInterval(watchdogRef.current); watchdogRef.current = null; return;
       }
-    }, 3000);
+      if (markedRunning) {
+        clearInterval(watchdogRef.current); watchdogRef.current = null; return;
+      }
+      const v = videoRef.current;
+      if (v && v.videoWidth > 0 && v.videoHeight > 0) {
+        markRunning();
+        clearInterval(watchdogRef.current); watchdogRef.current = null;
+        return;
+      }
+      elapsed += 400;
+      if (elapsed >= 6000) {
+        clearInterval(watchdogRef.current); watchdogRef.current = null;
+        snapshotDiag();
+        setScanStatus('error');
+        setScanError('Camera stream is blank. Tap Retry, or switch camera.');
+      }
+    }, 400);
   }, [browserInfo, useFrontCamera, startDecodeLoop, snapshotDiag]);
 
   // Trigger camera when stage becomes 'scan'; teardown on leave
@@ -394,11 +425,6 @@ export default function PayNow() {
     setScanError('');
     setScanStatus('starting');
     setTimeout(() => startCamera(), 60);
-  };
-
-  const skipScan = () => {
-    stopCamera();
-    setStage('confirm');
   };
 
   const openInExternalBrowser = async () => {
@@ -592,23 +618,6 @@ export default function PayNow() {
                   <div className="mt-2 text-[11px] text-white/70 leading-snug max-w-[240px]">
                     Browser permission prompt aane par <b className="text-lime">Allow</b> kariye
                   </div>
-                  {/* Always-visible escape hatches — so user never gets stuck waiting */}
-                  <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
-                    <button
-                      onClick={skipScan}
-                      data-testid="starting-enter-manually-btn"
-                      className="press-down inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white text-navy text-[11px] font-bold"
-                    >
-                      Enter UPI manually
-                    </button>
-                    <button
-                      onClick={() => { setMerchant((m) => ({ ...m, method: 'Cash' })); skipScan(); }}
-                      data-testid="starting-pay-cash-btn"
-                      className="press-down inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white/15 text-white border border-white/30 text-[11px] font-semibold"
-                    >
-                      Pay in Cash
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -652,13 +661,6 @@ export default function PayNow() {
                       <ExternalLink className="w-3 h-3" /> Open in Safari/Chrome
                     </button>
                   )}
-                  <button
-                    onClick={skipScan}
-                    data-testid="enter-manually-btn"
-                    className="mt-3 text-[11px] text-white/60 underline underline-offset-2"
-                  >
-                    or enter UPI manually
-                  </button>
                 </div>
               )}
 
@@ -678,24 +680,6 @@ export default function PayNow() {
 
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
-          </div>
-          <div className="flex items-center justify-center gap-3 text-xs flex-wrap">
-            <button
-              type="button"
-              onClick={() => { setMerchant((m) => ({ ...m, method: 'Cash' })); skipScan(); }}
-              data-testid="pay-cash-skip-btn"
-              className="press-down inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-soft text-navy font-semibold"
-            >
-              Pay in Cash
-            </button>
-            <button
-              type="button"
-              onClick={skipScan}
-              data-testid="skip-scan-manual-btn"
-              className="press-down inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-soft text-navy font-semibold"
-            >
-              Enter UPI manually
-            </button>
           </div>
         </div>
       )}
