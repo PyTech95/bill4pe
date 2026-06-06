@@ -49,6 +49,8 @@ export default function PayNow() {
   const [currentDeviceId, setCurrentDeviceId] = useState(null);
   const [useFrontCamera, setUseFrontCamera] = useState(false);
   const [paymentInitiated, setPaymentInitiated] = useState(false);
+  // Live diagnostics shown to user in error state — helps debug "black screen" in production
+  const [diag, setDiag] = useState({ ready: 0, vw: 0, vh: 0, trackMuted: null, trackState: '' });
 
   // Native camera refs
   const videoRef = useRef(null);
@@ -57,6 +59,7 @@ export default function PayNow() {
   const rafRef = useRef(null);
   const decodedRef = useRef(false);
   const startTokenRef = useRef(0);
+  const watchdogRef = useRef(null);
 
   // Load draft + geolocation
   useEffect(() => {
@@ -84,15 +87,21 @@ export default function PayNow() {
 
   const total = (draft?.items || []).reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
-  // Stop camera + cancel rAF loop
+  // Stop camera + cancel rAF loop + clear watchdog
   const stopCamera = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
     if (streamRef.current) {
       try { streamRef.current.getTracks().forEach((t) => t.stop()); } catch { /* */ }
       streamRef.current = null;
     }
     if (videoRef.current) {
-      try { videoRef.current.srcObject = null; } catch { /* */ }
+      try {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      } catch { /* */ }
     }
   }, []);
 
@@ -144,7 +153,24 @@ export default function PayNow() {
     rafRef.current = requestAnimationFrame(tick);
   }, [stopCamera]);
 
-  // Open camera with native getUserMedia + explicit timeout
+  // Snapshot live camera diagnostics — surfaces real reason for a black-frame to the user
+  const snapshotDiag = useCallback(() => {
+    const v = videoRef.current;
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    setDiag({
+      ready: v?.readyState ?? 0,
+      vw: v?.videoWidth ?? 0,
+      vh: v?.videoHeight ?? 0,
+      trackMuted: track ? track.muted : null,
+      trackState: track ? track.readyState : '',
+    });
+  }, []);
+
+  // Open camera with native getUserMedia. iOS-safe order:
+  //   1) Set video element attributes FIRST (playsinline / muted / autoplay)
+  //   2) Then assign srcObject
+  //   3) Wait for loadedmetadata before calling play()
+  //   4) Watchdog: if videoWidth stays 0 for >4s we surface a diagnostics error
   const startCamera = useCallback(async (opts = {}) => {
     const myToken = ++startTokenRef.current;
     setScanStatus('starting');
@@ -164,8 +190,25 @@ export default function PayNow() {
       return;
     }
 
-    // Build constraints — prefer back camera unless front toggled
-    const facing = opts.useFront ?? useFrontCamera ? 'user' : 'environment';
+    // Pre-prepare the <video> element BEFORE attaching the stream (critical for iOS Safari)
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.setAttribute('muted', 'true');
+        video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
+        video.controls = false;
+      } catch { /* */ }
+    }
+
+    // Build constraints — prefer back camera unless explicitly switched.
+    // Note: parens are required around `??` before `?:` (operator precedence).
+    const preferFront = (opts.useFront !== undefined ? opts.useFront : useFrontCamera);
+    const facing = preferFront ? 'user' : 'environment';
     const constraints = opts.deviceId
       ? { video: { deviceId: { exact: opts.deviceId } }, audio: false }
       : { video: { facingMode: { ideal: facing } }, audio: false };
@@ -189,8 +232,21 @@ export default function PayNow() {
         setScanStatus('denied');
         setScanError('Camera permission denied. Allow camera in browser settings and tap Retry.');
       } else if (notFound) {
-        setScanStatus('error');
-        setScanError('No camera found on this device.');
+        // Fallback: retry without facingMode constraint (some devices choke on `environment`)
+        if (!opts.relaxed) {
+          try {
+            const relaxed = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            stream = relaxed;
+          } catch (err2) {
+            setScanStatus('error');
+            setScanError(`No camera matched. (${err2?.name || 'unknown'}) Tap Retry.`);
+            return;
+          }
+        } else {
+          setScanStatus('error');
+          setScanError('No camera found on this device.');
+          return;
+        }
       } else if (timedOut) {
         setScanStatus('error');
         setScanError('Camera took too long to respond. Tap Retry, or check if another app is using the camera.');
@@ -198,7 +254,7 @@ export default function PayNow() {
         setScanStatus('error');
         setScanError(`Camera error: ${err?.message || err?.name || 'unknown'}. Tap Retry.`);
       }
-      return;
+      if (!stream) return;
     }
 
     if (myToken !== startTokenRef.current) {
@@ -208,23 +264,60 @@ export default function PayNow() {
     }
 
     streamRef.current = stream;
-    const video = videoRef.current;
     if (!video) {
       try { stream.getTracks().forEach((t) => t.stop()); } catch { /* */ }
       return;
     }
-    video.srcObject = stream;
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('webkit-playsinline', 'true');
-    video.muted = true;
 
+    // Listen for track state changes (iOS sometimes mutes the track silently)
     try {
-      await video.play();
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener?.('mute', snapshotDiag);
+        track.addEventListener?.('unmute', snapshotDiag);
+        track.addEventListener?.('ended', () => {
+          if (myToken !== startTokenRef.current) return;
+          setScanStatus('error');
+          setScanError('Camera stopped unexpectedly. Tap Retry.');
+          snapshotDiag();
+        });
+      }
+    } catch { /* */ }
+
+    // Wire metadata/playing handlers BEFORE attaching srcObject
+    const onLoadedMetadata = () => {
+      if (myToken !== startTokenRef.current) return;
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          // Autoplay rejected — common in some iOS in-app browsers
+          setScanStatus('error');
+          setScanError('Tap "Retry Camera" to grant playback permission.');
+          snapshotDiag();
+        });
+      }
+    };
+    const onPlaying = () => {
+      if (myToken !== startTokenRef.current) return;
+      setScanStatus('running');
+      snapshotDiag();
+      startDecodeLoop();
+    };
+    video.onloadedmetadata = onLoadedMetadata;
+    video.onplaying = onPlaying;
+
+    // FINALLY attach the stream (after attrs + listeners are wired)
+    try {
+      video.srcObject = stream;
     } catch (err) {
-      // Autoplay rejected — surface as error so user can tap retry (which is a user gesture)
       setScanStatus('error');
-      setScanError('Tap "Retry Camera" to grant playback permission.');
+      setScanError(`Could not attach stream: ${err?.message || 'unknown'}`);
       return;
+    }
+
+    // Some browsers won't fire loadedmetadata if metadata is already there — kick play() once
+    if (video.readyState >= 1) {
+      try { onLoadedMetadata(); } catch { /* */ }
     }
 
     // Track the active device for switch button
@@ -241,9 +334,18 @@ export default function PayNow() {
       setCameraList(cams);
     } catch { /* */ }
 
-    setScanStatus('running');
-    startDecodeLoop();
-  }, [browserInfo, useFrontCamera, startDecodeLoop]);
+    // Watchdog: if after 4.5s we still have 0 video dimensions, surface diagnostics
+    if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      if (myToken !== startTokenRef.current) return;
+      snapshotDiag();
+      const v = videoRef.current;
+      if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
+        setScanStatus('error');
+        setScanError('Camera stream is blank. Tap Retry, switch camera, or enter UPI manually.');
+      }
+    }, 4500);
+  }, [browserInfo, useFrontCamera, startDecodeLoop, snapshotDiag]);
 
   // Trigger camera when stage becomes 'scan'; teardown on leave
   useEffect(() => {
@@ -429,7 +531,11 @@ export default function PayNow() {
                 playsInline
                 muted
                 autoPlay
+                disablePictureInPicture
+                disableRemotePlayback
+                controls={false}
                 className="absolute inset-0 w-full h-full object-cover"
+                style={{ backgroundColor: '#000' }}
               />
               {/* hidden canvas used for jsQR frame grabs */}
               <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -465,6 +571,15 @@ export default function PayNow() {
                   </div>
                   <div className="mt-1 text-[11px] text-white/70 leading-snug max-w-[280px]">
                     {scanError || 'Allow camera access in your browser settings, then retry.'}
+                  </div>
+                  {/* Live diagnostics — helps debug "black screen" in production */}
+                  <div
+                    data-testid="camera-diag-chip"
+                    className="mt-2 font-mono text-[10px] text-white/55 leading-tight"
+                  >
+                    ready={diag.ready} • {diag.vw}×{diag.vh}
+                    {diag.trackState ? ` • ${diag.trackState}` : ''}
+                    {diag.trackMuted === true ? ' • muted' : ''}
                   </div>
                   <button
                     onClick={retryCamera}
@@ -509,7 +624,7 @@ export default function PayNow() {
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
           </div>
-          <div className="flex items-center justify-center gap-4 text-xs">
+          <div className="flex items-center justify-center gap-3 text-xs flex-wrap">
             <button
               type="button"
               onClick={() => { setMerchant((m) => ({ ...m, method: 'Cash' })); skipScan(); }}
@@ -517,6 +632,14 @@ export default function PayNow() {
               className="press-down inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-soft text-navy font-semibold"
             >
               Pay in Cash
+            </button>
+            <button
+              type="button"
+              onClick={skipScan}
+              data-testid="skip-scan-manual-btn"
+              className="press-down inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-soft text-navy font-semibold"
+            >
+              Enter UPI manually
             </button>
           </div>
         </div>

@@ -489,7 +489,11 @@ const VisionMission = () => (
         <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
           A leakage-free, AI-powered expense ecosystem for every corporate.
         </h3>
-        <p className="mt-5 text-white/60 leading-relaxed text-sm text-justify hyphens-auto">
+        <p
+          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
+          data-testid="vision-text"
+        >
           Bill4Pe is envisioned as a smart and secure platform that transforms how corporates
           manage imprest and petty expenses. With AI-enabled self-invoicing, employees and contract
           workers can generate instant, authenticated invoices — eliminating financial leakages,
@@ -506,7 +510,11 @@ const VisionMission = () => (
         <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
           Instant, authenticated self-invoices for unregistered-supplier expenses.
         </h3>
-        <p className="mt-5 text-white/60 leading-relaxed text-sm text-justify hyphens-auto">
+        <p
+          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
+          data-testid="mission-text"
+        >
           To revolutionize corporate expense management by offering an AI-enabled, smart and secure
           platform that facilitates the instant generation of self-invoices for expenses incurred
           from unregistered suppliers who do not provide authenticated or acceptable bills. We are
@@ -523,7 +531,11 @@ const VisionMission = () => (
         <h3 className="font-display text-xl sm:text-2xl font-bold mt-5 tracking-tight">
           Integrity, transparency & accountability — by design.
         </h3>
-        <p className="mt-5 text-white/60 leading-relaxed text-sm text-justify hyphens-auto">
+        <p
+          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
+          data-testid="ethics-text"
+        >
           Bill4Pe is committed to upholding the highest standards of integrity, transparency and
           accountability in corporate expense management. Our ethical foundation enables the
           generation of genuine, leakage-free and compliant self-invoices through an AI-enabled,
