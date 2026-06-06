@@ -10,7 +10,7 @@ export default function Logo({ variant = 'full', theme = 'light', className = ''
   return (
     <div className={`inline-flex items-center gap-2 ${className}`}>
       <img
-        src="/logo.png?v=3"
+        src="/logo.png?v=4"
         alt="Bill4Pe"
         style={{ height: size, width: 'auto' }}
         className="object-contain"
