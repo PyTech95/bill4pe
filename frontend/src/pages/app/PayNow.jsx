@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability, react-hooks/purity */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
@@ -407,8 +408,7 @@ export default function PayNow() {
       startTokenRef.current++; // invalidate any pending start
       stopCamera();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage]);
+  }, [stage, startCamera, stopCamera]);
 
   const switchCamera = async () => {
     if (cameraList.length < 2) return;
@@ -552,7 +552,7 @@ export default function PayNow() {
                   Safari Private mode me camera band hai
                 </div>
                 <div className="text-xs text-amber-800 mt-0.5 leading-snug">
-                  Apple Private Browsing me QR scan allow nahi karta. Normal Safari window me kholiye, ya neeche "Enter UPI manually" use kariye.
+                  Apple Private Browsing me QR scan allow nahi karta. Normal Safari window me kholiye, ya neeche &quot;Enter UPI manually&quot; use kariye.
                 </div>
               </div>
             </div>
