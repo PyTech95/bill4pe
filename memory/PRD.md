@@ -24,6 +24,15 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Verified — 2026-06-06 (Preview error fix)
+- 🔴 BUG FIXED — Webpack compile overlay was blocking the preview: `PayNow.jsx` referenced 3 nonexistent ESLint rules (`react-hooks/set-state-in-effect`, `react-hooks/immutability`, `react-hooks/purity`) in the file-level disable comment. Removed the stale disable directive. Lint now reports 0 issues; webpack-dev-server overlay no longer intercepts.
+- ✅ Verified PayNow visually after the fix:
+  - Phone login `/login/phone` with `9999999999` / `123456` works end-to-end.
+  - `/app/pay` renders with `<video>` element mounted (camera initializes; NotFoundError only in headless test env because no hardware).
+  - Confirmed "Pay in Cash" and "Enter UPI manually" buttons are gone (matches user's last requirement).
+  - "Retry Camera" button present as the only fallback.
+
+
 ## What's Been Verified — 2026-02-06 (UI sanity check after fork resume)
 - Visually verified on preview at 390×844 (mobile viewport):
   - ✅ `/login` — "An Intelligent Billing" tagline renders directly under logo, italic slate-400, no overlap.

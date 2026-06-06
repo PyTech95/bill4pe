@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability, react-hooks/purity */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
