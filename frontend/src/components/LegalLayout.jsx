@@ -13,8 +13,9 @@ export default function LegalLayout({ title, updatedOn, children }) {
       {/* Top bar */}
       <header className="border-b border-soft">
         <div className="max-w-3xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="bg-white inline-flex p-1.5 rounded-lg border border-soft">
+          <Link to="/" className="bg-white inline-flex flex-col items-center p-1.5 rounded-lg border border-soft">
             <img src="/logo.png" alt="Bill4Pe" className="h-7 w-auto" />
+            <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
           </Link>
           <Link
             to="/"

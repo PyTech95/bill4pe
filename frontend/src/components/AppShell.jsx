@@ -21,7 +21,10 @@ const TopBar = () => {
             <ChevronLeft className="w-5 h-5 text-navy" strokeWidth={2.2} />
           </button>
         ) : (
-          <img src="/logo.png" alt="Bill4Pe" className="h-9 w-auto rounded-md" data-testid="appshell-logo" />
+          <div className="inline-flex flex-col items-start" data-testid="appshell-logo">
+            <img src="/logo.png" alt="Bill4Pe" className="h-9 w-auto rounded-md" />
+            <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
+          </div>
         )}
         <button
           onClick={() => navigate('/app/profile')}
