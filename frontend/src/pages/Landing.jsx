@@ -240,8 +240,8 @@ const ScreenAutoFare = () => (
         </div>
         <span className="text-[9px] font-mono text-navy/70">FARE · ₹</span>
       </div>
-      <div className="font-mono font-bold text-3xl text-navy mt-1.5">₹ 184.00</div>
-      <div className="text-[10px] text-navy/70 mt-0.5">Kompally → Hitec City</div>
+      <div className="font-mono font-bold text-3xl text-navy mt-1.5">₹ 450.00</div>
+      <div className="text-[10px] text-navy/70 mt-0.5">Rajiv Chowk → Gurugram</div>
       {/* moving auto silhouette */}
       <motion.div
         className="absolute -bottom-1 text-2xl"
@@ -254,25 +254,25 @@ const ScreenAutoFare = () => (
         <div className="w-7 h-7 grid place-items-center bg-lime/20 rounded-lg"><MapPin className="w-3.5 h-3.5 text-navy" /></div>
         <div className="flex-1">
           <div className="text-[9px] uppercase tracking-wider text-slate-400">From</div>
-          <div className="text-xs font-semibold text-navy">Kompally, Hyderabad</div>
+          <div className="text-xs font-semibold text-navy">Rajiv Chowk, Delhi</div>
         </div>
       </div>
       <div className="bg-white border border-soft rounded-xl p-3 flex items-center gap-3">
         <div className="w-7 h-7 grid place-items-center bg-brand/15 rounded-lg"><MapPin className="w-3.5 h-3.5 text-brand" /></div>
         <div className="flex-1">
           <div className="text-[9px] uppercase tracking-wider text-slate-400">To</div>
-          <div className="text-xs font-semibold text-navy">Hitec City</div>
+          <div className="text-xs font-semibold text-navy">Gurugram</div>
         </div>
       </div>
       <div className="flex items-center justify-between text-[10px] py-1">
-        <span className="text-slate-500">Distance · 12.4 km</span>
+        <span className="text-slate-500">Distance · 30.0 km</span>
         <span className="font-mono text-navy">₹ 15/km</span>
       </div>
     </div>
     <div className="px-3.5 pb-4">
       <div className="px-3 py-2.5 bg-navy rounded-xl flex items-center justify-between">
         <span className="text-[10px] font-bold tracking-wider text-lime">FARE TOTAL</span>
-        <span className="font-mono font-bold text-lime text-sm">₹ 184.00</span>
+        <span className="font-mono font-bold text-lime text-sm">₹ 450.00</span>
       </div>
     </div>
   </div>
