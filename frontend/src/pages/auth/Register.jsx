@@ -76,8 +76,9 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
-        <Link to="/" className="self-start bg-white inline-flex p-2 rounded-xl">
+        <Link to="/" className="self-start bg-white inline-flex flex-col items-center p-2 rounded-xl">
           <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+          <span className="text-[9px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Start in 30 seconds.</div>
@@ -97,8 +98,9 @@ export default function Register() {
           <ArrowLeft className="w-3.5 h-3.5" /> Back to home
         </Link>
         <form onSubmit={submit} className="w-full max-w-sm py-12">
-          <Link to="/" className="md:hidden block mb-8 bg-white inline-flex p-2 rounded-xl">
+          <Link to="/" className="md:hidden mb-8 bg-white inline-flex flex-col items-center p-2 rounded-xl">
             <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+            <span className="text-[9px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
           </Link>
           <h1 className="font-display font-bold text-3xl">Create account</h1>
           <p className="text-sm text-slate-500 mt-1">Choose how you'll use BILL4PE.</p>

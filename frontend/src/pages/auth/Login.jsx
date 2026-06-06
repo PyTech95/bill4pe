@@ -47,8 +47,9 @@ export default function Login() {
           <ArrowLeft className="w-3.5 h-3.5" /> Back to home
         </Link>
         <form onSubmit={submit} className="w-full max-w-sm">
-          <Link to="/" className="md:hidden block mb-10 bg-white inline-flex p-2 rounded-xl">
+          <Link to="/" className="md:hidden mb-10 bg-white inline-flex flex-col items-center p-2 rounded-xl">
             <img src="/logo.png" alt="Bill4Pe" className="h-10 w-auto" />
+            <span className="text-[9px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
           </Link>
           <h1 className="font-display font-bold text-3xl">Sign in</h1>
           <p className="text-sm text-slate-500 mt-1">Use your registered email and password.</p>

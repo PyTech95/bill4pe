@@ -24,6 +24,17 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-06-06 (Tagline rollout + .json() audit)
+- **Tagline "An Intelligent Billing"** (small italic, slate-400) added below logo in all remaining auth screens:
+  - `Login.jsx` (mobile-only logo block — desktop already had it)
+  - `Register.jsx` (both desktop sidebar logo and mobile inline logo)
+  - `PhoneLogin.jsx` (both desktop sidebar logo and mobile inline logo)
+  - Existing locations (AppShell, LegalLayout, Login desktop) confirmed intact.
+- **Double `.json()` fetch audit**: Grepped entire `frontend/src` — only ONE `.json()` call exists (`TravelSubCategory.jsx` line 37 — Nominatim reverse-geocode) and it is correctly used (single `await res.json()`). All other API calls use axios via `lib/api.js` which auto-parses JSON. **No actual bug found**; handoff summary was inaccurate.
+- Verified visually via screenshot on `/login` and `/register` — tagline renders correctly below logo card.
+
+
+
 ## What's Been Implemented — 2026-02-28 (Vision/Mission/Ethics official copy)
 - Replaced placeholder Vision & Mission copy on Landing page with the **official corporate Vision, Mission and Ethics** content from user's "Vision Mission Ethics-Bill4Pe.docx".
 - Layout upgraded from 2-card to **3-card grid** (Vision · Mission · Ethics) inside `#vision` section of `Landing.jsx`.
