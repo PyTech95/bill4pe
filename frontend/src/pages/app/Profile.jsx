@@ -95,6 +95,42 @@ export default function Profile() {
         </div>
       </div>
 
+      {/* Corporate account badge */}
+      {user?.user_type === 'corporate' && (
+        <div className="flat-card p-5 border-brand/40 bg-brand/5" data-testid="corporate-badge-card">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-navy text-brand grid place-items-center shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-display font-bold text-navy text-base truncate">
+                  {user?.corporate_name || 'Corporate account'}
+                </div>
+                {user?.subscription_status === 'trial' && (
+                  <span className="text-[10px] uppercase tracking-wider bg-brand text-white font-bold px-2 py-0.5 rounded">
+                    14-day trial
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-slate-600 mt-1">
+                {(() => {
+                  if (!user?.subscription_plan) return 'No subscription selected';
+                  const [cyc] = (user.subscription_plan || '').split('_');
+                  const cycLabel = { monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' }[cyc] || cyc;
+                  return user?.employee_limit
+                    ? `${cycLabel} plan · Up to ${user.employee_limit} employees`
+                    : `${cycLabel} plan`;
+                })()}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                Razorpay billing will activate once payments are enabled. You won't be charged today.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit profile */}
       <div className="flat-card p-5 space-y-4">
         <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Edit profile</div>

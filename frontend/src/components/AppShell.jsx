@@ -1,13 +1,16 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, LayoutDashboard, Wallet, User, FileBarChart, ChevronLeft } from 'lucide-react';
+import { Home, LayoutDashboard, Wallet, User, FileBarChart, ChevronLeft, Building2 } from 'lucide-react';
 import OnboardingTour from '@/components/OnboardingTour';
 import PWAInstallBanner from '@/components/PWAInstallBanner';
+import { useAuth } from '@/lib/auth';
 
 const TopBar = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const showBack = pathname !== '/app';
+  const isCorporate = user?.user_type === 'corporate';
 
   return (
     <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/85 border-b border-soft">
@@ -21,8 +24,18 @@ const TopBar = () => {
             <ChevronLeft className="w-5 h-5 text-navy" strokeWidth={2.2} />
           </button>
         ) : (
-          <div className="inline-flex items-center" data-testid="appshell-logo">
+          <div className="inline-flex items-center gap-2" data-testid="appshell-logo">
             <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-12 w-auto rounded-md object-contain" />
+            {isCorporate && (
+              <span
+                data-testid="appshell-corporate-chip"
+                title={user?.corporate_name || 'Corporate'}
+                className="inline-flex items-center gap-1 bg-navy text-brand text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+              >
+                <Building2 className="w-3 h-3" />
+                <span className="max-w-[100px] truncate">{user?.corporate_name || 'Corporate'}</span>
+              </span>
+            )}
           </div>
         )}
         <button

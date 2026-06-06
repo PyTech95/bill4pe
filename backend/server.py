@@ -306,10 +306,8 @@ async def login(body: LoginReq):
     if not user or not check_pw(body.password, user["password"]):
         raise HTTPException(401, "Invalid credentials")
     token = make_token(user["id"])
-    return {"token": token, "user": {
-        "id": user["id"], "email": user["email"], "name": user["name"],
-        "wallet_balance": user.get("wallet_balance", 0.0),
-    }}
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return {"token": token, "user": fresh}
 
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
