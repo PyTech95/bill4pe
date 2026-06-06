@@ -542,8 +542,7 @@ const Hero = () => {
       <Section className="relative pt-20 pb-24 md:pt-28 md:pb-32">
         <div className="grid lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-7">
-            <Pill dark><Sparkles className="w-3 h-3" /> An Intelligent Billing</Pill>
-            <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-7xl mt-6 tracking-tight leading-[1.05]">
+            <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-7xl tracking-tight leading-[1.05]">
               Pay your bill.<br />
               <span className="text-lime">Generate</span> the invoice.<br />
               Done in 60 seconds.
@@ -1058,7 +1057,6 @@ export default function Landing() {
           <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
             <Link to="/" data-testid="nav-logo" className="bg-white inline-flex flex-col items-center p-1.5 rounded-xl">
               <img src="/logo.png" alt="Bill4Pe" className="h-8 w-auto" />
-              <span className="text-[8px] italic text-slate-400 mt-0.5 leading-none">An Intelligent Billing</span>
             </Link>
             <div className="flex items-center gap-2">
               <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
