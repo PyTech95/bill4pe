@@ -24,6 +24,15 @@ BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a 
 - PDF must be corporate-grade with merchant, items, total, geo, timestamp.
 
 
+## What's Been Implemented — 2026-02-08 (PayNow camera "stuck on Starting" fix v2)
+- User reported `PayNow` camera page stuck on "STARTING CAMERA..." overlay in production iOS Safari. Screenshot confirmed user could not escape the loading state.
+- **Fix 1**: Added iOS Safari **Private Browsing detection** (`localStorage.setItem` probe). When detected, we short-circuit `startCamera()` and show a clear amber warning banner — "Safari Private mode me camera band hai" — plus direct user to manual entry.
+- **Fix 2**: Embedded **always-visible escape buttons** ("Enter UPI manually" + "Pay in Cash") INSIDE the black "Starting camera…" overlay (`data-testid=starting-enter-manually-btn`, `starting-pay-cash-btn`). User can now bypass the camera at any moment without waiting for it to error out.
+- **Fix 3**: Reduced camera watchdog from 4.5s → **3s** so blank streams surface faster.
+- File touched: `/app/frontend/src/pages/app/PayNow.jsx` only.
+- No backend changes.
+
+
 ## What's Been Implemented — 2026-06-06 (Tagline rollout + .json() audit)
 - **Tagline "An Intelligent Billing"** (small italic, slate-400) added below logo in all remaining auth screens:
   - `Login.jsx` (mobile-only logo block — desktop already had it)

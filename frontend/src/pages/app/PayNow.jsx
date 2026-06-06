@@ -19,7 +19,7 @@ const parseUpi = (data) => {
 
 // Detect in-app webviews that silently block getUserMedia on iOS
 const detectInAppBrowser = () => {
-  if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '' };
+  if (typeof navigator === 'undefined') return { isInApp: false, isIOS: false, name: '', isPrivate: false };
   const ua = navigator.userAgent || '';
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
   const isAndroid = /Android/i.test(ua);
@@ -32,7 +32,21 @@ const detectInAppBrowser = () => {
   const isIosSuspectWebView = isIOS && !/Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
   if (!name && isIosSuspectWebView) name = 'WhatsApp / In-app browser';
   if (!name && isAndroid && /; wv\)/i.test(ua)) name = 'In-app browser';
-  return { isInApp: !!name, isIOS, isAndroid, name };
+
+  // iOS Safari Private Browsing detection — Apple BLOCKS getUserMedia in private mode.
+  // Heuristic: in private mode, navigator.storage.estimate() returns very low quota,
+  // and localStorage.setItem may throw or have a tiny limit. We use a quick sync probe.
+  let isPrivate = false;
+  if (isIOS && !name) {
+    try {
+      const k = '__b4p_pm_probe__';
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+    } catch {
+      isPrivate = true;
+    }
+  }
+  return { isInApp: !!name, isIOS, isAndroid, name, isPrivate };
 };
 
 export default function PayNow() {
@@ -175,6 +189,13 @@ export default function PayNow() {
     const myToken = ++startTokenRef.current;
     setScanStatus('starting');
     setScanError('');
+
+    // Early exit: iOS Safari Private Browsing BLOCKS camera entirely (Apple policy)
+    if (browserInfo.isPrivate) {
+      setScanStatus('error');
+      setScanError('Safari Private Browsing me camera band rehta hai. Normal Safari window me kholiye ya neeche se UPI manually enter kariye.');
+      return;
+    }
 
     // Pre-flight: no MediaDevices API at all (older browsers / strict WebViews)
     const hasMediaApi = typeof navigator !== 'undefined'
@@ -334,7 +355,7 @@ export default function PayNow() {
       setCameraList(cams);
     } catch { /* */ }
 
-    // Watchdog: if after 4.5s we still have 0 video dimensions, surface diagnostics
+    // Watchdog: if after 3s we still have 0 video dimensions, surface diagnostics
     if (watchdogRef.current) clearTimeout(watchdogRef.current);
     watchdogRef.current = setTimeout(() => {
       if (myToken !== startTokenRef.current) return;
@@ -342,9 +363,9 @@ export default function PayNow() {
       const v = videoRef.current;
       if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
         setScanStatus('error');
-        setScanError('Camera stream is blank. Tap Retry, switch camera, or enter UPI manually.');
+        setScanError('Camera stream is blank. Tap Retry, switch camera, or enter UPI manually below.');
       }
-    }, 4500);
+    }, 3000);
   }, [browserInfo, useFrontCamera, startDecodeLoop, snapshotDiag]);
 
   // Trigger camera when stage becomes 'scan'; teardown on leave
@@ -494,6 +515,23 @@ export default function PayNow() {
 
       {stage === 'scan' && (
         <div className="mt-5 space-y-4">
+          {browserInfo.isPrivate && (
+            <div
+              data-testid="private-mode-warning-banner"
+              className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3"
+            >
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-bold text-amber-900">
+                  Safari Private mode me camera band hai
+                </div>
+                <div className="text-xs text-amber-800 mt-0.5 leading-snug">
+                  Apple Private Browsing me QR scan allow nahi karta. Normal Safari window me kholiye, ya neeche "Enter UPI manually" use kariye.
+                </div>
+              </div>
+            </div>
+          )}
+
           {browserInfo.isInApp && (
             <div
               data-testid="inapp-warning-banner"
@@ -553,6 +591,23 @@ export default function PayNow() {
                   <div className="mt-3 text-xs uppercase tracking-[0.25em] font-bold">Starting camera…</div>
                   <div className="mt-2 text-[11px] text-white/70 leading-snug max-w-[240px]">
                     Browser permission prompt aane par <b className="text-lime">Allow</b> kariye
+                  </div>
+                  {/* Always-visible escape hatches — so user never gets stuck waiting */}
+                  <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                    <button
+                      onClick={skipScan}
+                      data-testid="starting-enter-manually-btn"
+                      className="press-down inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white text-navy text-[11px] font-bold"
+                    >
+                      Enter UPI manually
+                    </button>
+                    <button
+                      onClick={() => { setMerchant((m) => ({ ...m, method: 'Cash' })); skipScan(); }}
+                      data-testid="starting-pay-cash-btn"
+                      className="press-down inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white/15 text-white border border-white/30 text-[11px] font-semibold"
+                    >
+                      Pay in Cash
+                    </button>
                   </div>
                 </div>
               )}
