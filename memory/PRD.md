@@ -10,6 +10,36 @@
 - **Verified**: Headless screenshot at 414×896 (iPhone viewport) confirmed: manual button renders, click → confirm stage with merchant form + payment mode toggle + UPI app picker fully wired. Toast shows "UPI ID aur Merchant Name manually bharkar payment kariye."
 - File touched: `/app/frontend/src/pages/app/PayNow.jsx` only (47 lines added).
 
+## What's Been Implemented — 2026-02-09 (Backend Refactor — server.py 1707 → 62 lines)
+- **Goal**: Split the monolithic `backend/server.py` into a clean, maintainable module tree without changing any API contract.
+- **Outcome**:
+  ```
+  backend/
+  ├── server.py              (62 lines — just FastAPI app + CORS + router mounting)
+  ├── core/
+  │   ├── config.py          (env, MONGO_URL, JWT_SECRET, EMERGENT_LLM_KEY, BILL_FEE, REFERRAL_BONUS)
+  │   ├── db.py              (Motor client + db handle)
+  │   ├── models.py          (all Pydantic schemas)
+  │   └── security.py        (JWT, bcrypt, get_current_user dep)
+  ├── services/
+  │   ├── prompts.py         (FOOD/GROCERY/PANTRY/STATIONERY/RECEIPT/VOICE prompts)
+  │   ├── pdf.py             (build_pdf_bytes, build_report_pdf — ReportLab + QR)
+  │   └── referrals.py       (gen_referral_code, ensure_referral_code, apply_referral)
+  └── routers/
+      ├── auth.py            (/auth/* + /auth/otp/*)
+      ├── ai.py              (/ai/detect-items, /ai/suggest-items, /ai/scan-receipt, /voice/expense)
+      ├── expenses.py        (/expenses CRUD, /stats, /trips, /merchants/recent, /export.csv)
+      ├── wallet.py          (/wallet, /wallet/recharge)
+      ├── bills.py           (/bills/{id}/generate, /bills/{id}/pdf)
+      ├── reports.py         (/reports CRUD + /reports/{id}/pdf)
+      ├── referrals.py       (/referrals/me, /referrals/validate/{code})
+      ├── favourites.py      (/favourites — pantry/grocery only)
+      └── contact.py         (/contact)
+  ```
+- **Pattern**: Each router exports `router = APIRouter()` with no prefix; `server.py` wraps them all under one `APIRouter(prefix="/api")` and mounts to the app. Standard FastAPI separation.
+- **Regression test**: 30/30 backend tests PASSED via `testing_agent_v3_fork` (iteration_6). Covers auth (email + phone OTP), wallet, expenses CRUD/stats/trips/merchants/CSV, bills (PDF + ₹5 deduct + token query fallback), reports CRUD/PDF, referrals, favourites, AI suggest, contact, and 401 auth boundary enforcement. Zero behavioral changes. Test file at `/app/backend/tests/test_refactor_regression.py`.
+- **Note**: PayNow.jsx (~844 lines) flagged as the next candidate for a similar split (Scan / Confirm / Receipt stages).
+
 ## Original Problem Statement
 BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a smart journey, not a normal expense tracker". Users pick a service category (Food/Travel/Hotel/Stationery/Gift/Pantry/Flower Shop/Grocery/Cleaning/Other), drill into a sub-category, capture items via AI image detection or manual entry, pay merchants via UPI QR scan, auto-capture merchant + txn details, then generate a corporate-grade PDF invoice (₹5 from wallet). Includes wallet, dashboard with filters/reports, and a premium landing page for billforpay.com. Must be installable PWA, mobile-first, offline-capable.
 
