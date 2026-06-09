@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
-import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, AlertCircle, ExternalLink, Copy } from 'lucide-react';
+import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, AlertCircle, ExternalLink, Copy, Keyboard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -426,6 +426,15 @@ export default function PayNow() {
     setTimeout(() => startCamera(), 60);
   };
 
+  // Escape hatch: skip the camera entirely and go straight to manual UPI entry.
+  // Critical fallback for users on devices/browsers where getUserMedia silently fails
+  // (iOS PWA standalone, locked-down work profiles, older Android WebViews, etc.)
+  const enterManually = () => {
+    stopCamera();
+    setStage('confirm');
+    toast.info('UPI ID aur Merchant Name manually bharkar payment kariye.');
+  };
+
   const openInExternalBrowser = async () => {
     const url = window.location.href;
     try {
@@ -540,6 +549,23 @@ export default function PayNow() {
 
       {stage === 'scan' && (
         <div className="mt-5 space-y-4">
+          {browserInfo.isStandalonePWA && browserInfo.isIOS && (
+            <div
+              data-testid="pwa-standalone-warning-banner"
+              className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3"
+            >
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-bold text-amber-900">
+                  Installed PWA me iOS camera flaky hai
+                </div>
+                <div className="text-xs text-amber-800 mt-0.5 leading-snug">
+                  Camera open na ho to Safari me kholiye, ya neeche &quot;Enter UPI manually&quot; use kariye.
+                </div>
+              </div>
+            </div>
+          )}
+
           {browserInfo.isPrivate && (
             <div
               data-testid="private-mode-warning-banner"
@@ -651,6 +677,13 @@ export default function PayNow() {
                   >
                     <RefreshCw className="w-4 h-4" /> Retry Camera
                   </button>
+                  <button
+                    onClick={enterManually}
+                    data-testid="overlay-manual-entry-btn"
+                    className="press-down mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/85 underline underline-offset-2"
+                  >
+                    <Keyboard className="w-3 h-3" /> Enter UPI manually instead
+                  </button>
                   {scanStatus === 'inapp' && (
                     <button
                       onClick={openInExternalBrowser}
@@ -680,6 +713,19 @@ export default function PayNow() {
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
           </div>
+
+          {/* Always-visible escape hatch — works on every device, every browser */}
+          <button
+            type="button"
+            onClick={enterManually}
+            data-testid="manual-entry-btn"
+            className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-white border border-soft text-navy text-sm font-bold"
+          >
+            <Keyboard className="w-4 h-4" /> Enter UPI manually
+          </button>
+          <p className="text-[11px] text-slate-400 text-center -mt-1 leading-snug">
+            QR scan na ho? Manual mode me UPI ID aur amount type kariye.
+          </p>
         </div>
       )}
 

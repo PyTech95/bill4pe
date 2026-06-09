@@ -1,5 +1,15 @@
 # BILL4PE — Product Requirements Document
 
+
+## What's Been Implemented — 2026-02-09 (PayNow camera escape hatch — added back)
+- **Root issue**: User reported camera "not opening" on both preview & production — a P0 recurring blocker (4th recurrence). The `<video>` element already had `playsInline`, `muted`, `autoPlay`, a watchdog timer, and live diagnostics from prior work. The actual gap: previous session removed the manual entry buttons per user request, but with camera failures persisting on real devices, users had zero way to complete payments.
+- **Fix**: Re-added `enterManually()` handler that stops the camera stream and advances directly to the confirm stage. Added 3 escape touchpoints in `PayNow.jsx`:
+  1. **Always-visible primary button** below the camera viewport (`data-testid=manual-entry-btn`, full-width white button with keyboard icon + helper text "QR scan na ho? Manual mode me UPI ID aur amount type kariye.").
+  2. **Inline link inside the error overlay** (`data-testid=overlay-manual-entry-btn`) shown alongside Retry Camera.
+  3. **PWA standalone warning banner** (`data-testid=pwa-standalone-warning-banner`) shown when iOS user is in installed PWA mode (where camera is known to be flaky).
+- **Verified**: Headless screenshot at 414×896 (iPhone viewport) confirmed: manual button renders, click → confirm stage with merchant form + payment mode toggle + UPI app picker fully wired. Toast shows "UPI ID aur Merchant Name manually bharkar payment kariye."
+- File touched: `/app/frontend/src/pages/app/PayNow.jsx` only (47 lines added).
+
 ## Original Problem Statement
 BILL4PE is an AI-powered guided reimbursement and invoice generation PWA — "a smart journey, not a normal expense tracker". Users pick a service category (Food/Travel/Hotel/Stationery/Gift/Pantry/Flower Shop/Grocery/Cleaning/Other), drill into a sub-category, capture items via AI image detection or manual entry, pay merchants via UPI QR scan, auto-capture merchant + txn details, then generate a corporate-grade PDF invoice (₹5 from wallet). Includes wallet, dashboard with filters/reports, and a premium landing page for billforpay.com. Must be installable PWA, mobile-first, offline-capable.
 
