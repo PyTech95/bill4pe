@@ -14,7 +14,7 @@ def _pdf_text(content_bytes):
     try:
         reader = PdfReader(io.BytesIO(content_bytes))
         return "\n".join((p.extract_text() or "") for p in reader.pages)
-    except Exception as e:
+    except Exception:
         return ""
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ai-expense-hub-8.preview.emergentagent.com").rstrip("/")

@@ -1,0 +1,36 @@
+{
+  "summary": "Regression-tested BILL4PE post-refactor (server.py 1707 -> 62 lines split into core/+services/+routers/). 30/30 backend tests PASS covering Auth (email+phone OTP), Wallet, Expenses CRUD+stats+trips+merchants+CSV, Bills (PDF+₹5 deduct+token query fallback), Reports CRUD+PDF, Referrals, Favourites, AI suggest, Contact form, and auth boundary (401 enforcement). All 4 PayNow frontend escape-hatch testids verified working (manual-entry-btn, overlay-manual-entry-btn, merchant-name-input, merchant-upi-input). pwa-standalone-warning-banner correctly hidden on non-iOS-PWA. No regressions vs pre-refactor monolith.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_refactor_regression.py",
+    "/app/backend/tests/test_bill4pe_v2.py",
+    "/app/test_reports/pytest/pytest_results_iter6.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Refactor is clean: server.py is now 62 lines and only wires routers; logic lives in routers/ (10 files), services/ (pdf, prompts, referrals), core/ (config, db, models, security). Good separation.",
+    "All routers correctly mounted under /api prefix via APIRouter(prefix='/api') in server.py — no endpoint-path regressions.",
+    "HTTPBearer uses auto_error=False in core/security.py — gives clean 401 instead of 403 (verified via tests).",
+    "Mongo ObjectId properly excluded in responses (verified — no `_id` in expense/report responses).",
+    "Minor: PayNow.jsx is large (~844 lines) and could be split into Scan/Confirm/Receipt stages for maintainability per >700-line guideline. Not blocking.",
+    "Minor: Two prior test_bill4pe_v2.py and conftest.py use TLD `.test` and `.bill4pe.test` patterns in some scopes, but EmailStr rejects `.test` TLD; new regression tests use `bill4pe-qa.com`. Existing v2 suite uses bill4pe-qa.com in conftest (good)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_refactor_regression.py (new, 30 regression tests)"
+  ],
+  "success_rate": {"backend": "100% (30/30)", "frontend": "100% on PayNow manual-entry escape hatch verification (4/4 testids verified)"},
+  "test_credentials": "Phone OTP: 9999999999 / 123456 (universal demo). Login flow: 1) localStorage.setItem('bill4pe_onboarded_v1','true') 2) Click 'Phone' tab 3) Fill phone + click 'Send OTP' 4) Fill OTP + click 'Verify & continue'.",
+  "seed_data_creation": "Each test run creates one fresh email user (test_<uuid>@bill4pe-qa.com / Pass@12345) and one expense/report (auto-deleted by test_report_delete). PayNow test pre-seeds sessionStorage.bill4pe_draft with food category 100INR draft to allow /app/pay route access.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Post-refactor regression PASSED 100% — server.py is the 62-line slim entrypoint; routers/services/core split is functional. Reusable test file: /app/backend/tests/test_refactor_regression.py (30 tests, ~7s runtime). Public BASE_URL: REACT_APP_BACKEND_URL (=https://ai-expense-hub-8.preview.emergentagent.com). Existing user phone 9999999999 has 3+ expenses, wallet ~₹35-1000+ (wallet got recharged during these tests). PayNow escape hatch testids confirmed present on actual rendered DOM: manual-entry-btn (always visible), overlay-manual-entry-btn (visible only when camera fails — NotFoundError on headless Chromium), merchant-name-input, merchant-upi-input. pwa-standalone-warning-banner only shows for iOS PWA standalone — count=0 on Chrome desktop is correct. Note: EmailStr rejects `.test` TLD; use `.com` for test emails.",
+  "rca of the issue": "N/A — no functional bugs found. Initially 2/30 tests failed due to test-author error (EmailStr rejecting `.test` TLD), fixed locally by switching to `bill4pe-qa.com`. All 30/30 passed after fix. Backend refactor preserves full API contract parity."
+}
