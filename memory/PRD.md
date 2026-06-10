@@ -1,6 +1,24 @@
 # BILL4PE — Product Requirements Document
 
 
+## What's Been Implemented — 2026-02-10 (Corporate B2B Dashboard, Employee Management, Approval Flow)
+- **Scope**: Full corporate / B2B workflow. Corporate admins land on a dedicated Company Dashboard, can manage employees (add with temp password OR invite via link), approve/reject employee bills, and recharge a centralized company wallet that pays the ₹5 fee for ALL employee-generated bills.
+- **Backend (new)**:
+  - `routers/company.py` — endpoints: `GET /api/company/me`, `GET/POST/PUT/DELETE /api/company/employees`, `POST /api/company/employees/invite`, `GET /api/company/invite/{token}`, `POST /api/company/invite/accept`, `GET /api/company/approvals?status=`, `POST /api/company/approvals/{eid}/approve|reject`, `GET /api/company/wallet`, `POST /api/company/wallet/recharge`.
+  - `core/models.py` — added `EmployeeCreate, EmployeeInvite, EmployeeUpdate, AcceptInviteReq, ApprovalDecision`.
+  - `routers/auth.py register` — creates a `companies` collection record on corporate signup; admin user gets `role='admin'`, `company_id`.
+  - `routers/expenses.py create_expense` — auto-sets `approval_status='pending'` for employees with company_id; `approved` for admins/individuals; stamps `company_id`.
+  - `routers/bills.py generate_bill` — gates employees on `approval_status='approved'`; debits the COMPANY wallet (not user wallet) for employees with 402 fallback if balance < ₹5.
+- **Frontend (new/changed)**:
+  - `pages/app/CompanyDashboard.jsx` — 4-tab dashboard (Overview / Employees / Approvals / Wallet) with KPIs, employee CRUD, temp-password & invite-link modals, approve/reject inline forms, company wallet recharge (mock).
+  - `pages/auth/AcceptInvite.jsx` — public route `/accept-invite?token=...` for employees to set password and join the company.
+  - `pages/app/Splash.jsx` — auto-redirects `role=admin` users to `/app/company`.
+  - `components/AppShell.jsx` — bottom-nav "Company" tab shown only to admins.
+  - `pages/app/Dashboard.jsx` — bill rows now show `pending/rejected` badges for employees.
+- **Tested**: 100% pass — `/app/backend/tests/test_corporate_b2b.py` (21 cases) + Playwright smoke flow. Bill-fee centralization, role-based 403 isolation, employee-limit enforcement, invite-token expiry, and approval gating all verified.
+- **Mocked**: Company wallet recharge has NO real payment gateway (returns success immediately, ready for future Razorpay swap).
+
+
 ## What's Been Implemented — 2026-02-09 (PayNow camera escape hatch — added back)
 - **Root issue**: User reported camera "not opening" on both preview & production — a P0 recurring blocker (4th recurrence). The `<video>` element already had `playsInline`, `muted`, `autoPlay`, a watchdog timer, and live diagnostics from prior work. The actual gap: previous session removed the manual entry buttons per user request, but with camera failures persisting on real devices, users had zero way to complete payments.
 - **Fix**: Re-added `enterManually()` handler that stops the camera stream and advances directly to the confirm stage. Added 3 escape touchpoints in `PayNow.jsx`:

@@ -82,9 +82,16 @@ export default function CompanyDashboard() {
           {company.name || 'Your Company'}
         </h1>
         <div className="text-xs text-slate-500 mt-1">
-          {company.subscription_plan
-            ? `Plan: ${company.subscription_plan.replace('_', ' · ')} employees`
-            : 'Trial'}
+          {(() => {
+            const plan = company.subscription_plan || '';
+            const m = plan.match(/_(\d+)$/);
+            if (plan && m) {
+              const seats = m[1];
+              const cycle = plan.replace(/_\d+$/, '').replace(/_/g, ' ');
+              return `Plan: ${cycle} · ${seats} seats`;
+            }
+            return plan ? `Plan: ${plan.replace(/_/g, ' ')}` : 'Trial';
+          })()}
           {' · '}
           <span className="text-brand font-semibold">{company.subscription_status || 'trial'}</span>
         </div>
