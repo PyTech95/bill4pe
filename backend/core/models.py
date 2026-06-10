@@ -129,3 +129,44 @@ class FavouriteItem(BaseModel):
 class FavouritesSave(BaseModel):
     category: str
     items: List[FavouriteItem]
+
+
+# ----- Corporate / B2B -----
+
+class EmployeeCreate(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    monthly_cap: Optional[float] = None
+    temp_password: Optional[str] = None  # if omitted, system generates one
+
+
+class EmployeeInvite(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    monthly_cap: Optional[float] = None
+
+
+class EmployeeUpdate(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    monthly_cap: Optional[float] = None
+    is_active: Optional[bool] = None
+
+
+class AcceptInviteReq(BaseModel):
+    token: str
+    password: str
+
+
+class ApprovalDecision(BaseModel):
+    reason: Optional[str] = None

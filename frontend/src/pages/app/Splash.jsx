@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Wallet as WalletIcon, TrendingUp, Sparkles,
@@ -27,8 +27,10 @@ export default function Splash() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ total: 0, today: 0, count: 0 });
   const [merchants, setMerchants] = useState([]);
+  const isAdmin = user?.role === 'admin' && user?.company_id;
 
   useEffect(() => {
+    if (isAdmin) return undefined;
     let cancelled = false;
     (async () => {
       try {
@@ -52,11 +54,17 @@ export default function Splash() {
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [isAdmin]);
 
   const food = useMemo(() => catByKey('food'), []);
   const allCats = useMemo(() => CATEGORIES, []);
   const firstName = user?.name?.split(' ')[0] || 'there';
+
+  // Corporate admins land on the Company Dashboard instead of the personal splash.
+  // (Placed after hooks so hook order stays stable.)
+  if (isAdmin) {
+    return <Navigate to="/app/company" replace />;
+  }
 
   const quickPay = (m) => {
     sessionStorage.setItem('bill4pe_draft', JSON.stringify({

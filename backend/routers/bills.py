@@ -19,25 +19,57 @@ router = APIRouter(tags=["bills"])
 
 @router.post("/bills/{eid}/generate")
 async def generate_bill(eid: str, user=Depends(get_current_user)):
-    """Charges ₹5 from wallet and marks the expense as bill-generated."""
+    """Charges the bill fee. Employees must have admin-approved expense.
+
+    - Individual / Admin: deducts from personal wallet.
+    - Employee: deducts from the company wallet (centralised billing).
+    """
     exp = await db.expenses.find_one({"id": eid, "user_id": user["id"]}, {"_id": 0})
     if not exp:
         raise HTTPException(404, "Expense not found")
     if exp.get("bill_generated"):
         return {"bill_id": exp.get("bill_id"), "message": "Already generated"}
 
-    u = await db.users.find_one({"id": user["id"]})
-    bal = float(u.get("wallet_balance", 0.0))
-    if bal < BILL_FEE:
-        raise HTTPException(402, f"Insufficient wallet balance. Need ₹{BILL_FEE}, have ₹{bal:.2f}")
+    # Employee approval gating
+    if user.get("role") == "employee":
+        if exp.get("approval_status") != "approved":
+            raise HTTPException(403, "Bill is awaiting admin approval")
 
-    new_bal = round(bal - BILL_FEE, 2)
     bill_id = f"B4P-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{eid[:6].upper()}"
-    await db.users.update_one({"id": user["id"]}, {"$set": {"wallet_balance": new_bal}})
-    await db.wallet_txns.insert_one({
-        "id": str(uuid.uuid4()), "user_id": user["id"], "type": "debit",
-        "amount": BILL_FEE, "reason": f"Bill generation: {bill_id}", "created_at": now_iso()
-    })
+
+    if user.get("role") == "employee" and user.get("company_id"):
+        company = await db.companies.find_one({"id": user["company_id"]})
+        if not company:
+            raise HTTPException(404, "Company not found")
+        bal = float(company.get("wallet_balance", 0.0))
+        if bal < BILL_FEE:
+            raise HTTPException(
+                402,
+                f"Company wallet has insufficient balance. Need ₹{BILL_FEE}, have ₹{bal:.2f}. Ask your admin to recharge."
+            )
+        new_bal = round(bal - BILL_FEE, 2)
+        await db.companies.update_one({"id": company["id"]}, {"$set": {"wallet_balance": new_bal}})
+        await db.wallet_txns.insert_one({
+            "id": str(uuid.uuid4()),
+            "company_id": company["id"],
+            "user_id": user["id"],
+            "type": "debit",
+            "amount": BILL_FEE,
+            "reason": f"Bill generation by {user.get('name')}: {bill_id}",
+            "created_at": now_iso(),
+        })
+    else:
+        u = await db.users.find_one({"id": user["id"]})
+        bal = float(u.get("wallet_balance", 0.0))
+        if bal < BILL_FEE:
+            raise HTTPException(402, f"Insufficient wallet balance. Need ₹{BILL_FEE}, have ₹{bal:.2f}")
+        new_bal = round(bal - BILL_FEE, 2)
+        await db.users.update_one({"id": user["id"]}, {"$set": {"wallet_balance": new_bal}})
+        await db.wallet_txns.insert_one({
+            "id": str(uuid.uuid4()), "user_id": user["id"], "type": "debit",
+            "amount": BILL_FEE, "reason": f"Bill generation: {bill_id}", "created_at": now_iso()
+        })
+
     await db.expenses.update_one({"id": eid}, {"$set": {
         "bill_generated": True, "bill_id": bill_id, "bill_generated_at": now_iso()
     }})

@@ -22,9 +22,13 @@ router = APIRouter(tags=["expenses"])
 async def create_expense(body: ExpenseCreate, user=Depends(get_current_user)):
     eid = str(uuid.uuid4())
     total = round(sum(i.quantity * i.unit_price for i in body.items), 2)
+    is_employee = user.get("role") == "employee" and user.get("company_id")
     doc = {
         "id": eid,
         "user_id": user["id"],
+        "company_id": user.get("company_id") if user.get("role") in ("employee", "admin") else None,
+        "submitter_role": user.get("role"),
+        "approval_status": "pending" if is_employee else "approved",
         "category": body.category,
         "sub_category": body.sub_category,
         "items": [i.model_dump() for i in body.items],

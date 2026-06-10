@@ -27,6 +27,21 @@ async def register(body: RegisterReq):
     user_type = (body.user_type or "individual").lower().strip()
     if user_type not in ("individual", "corporate"):
         user_type = "individual"
+
+    company_id = None
+    if user_type == "corporate":
+        company_id = str(uuid.uuid4())
+        await db.companies.insert_one({
+            "id": company_id,
+            "name": (body.corporate_name or "").strip() or "My Company",
+            "admin_id": uid,
+            "wallet_balance": 0.0,
+            "subscription_plan": (body.subscription_plan or "").strip() or None,
+            "employee_limit": int(body.employee_limit) if body.employee_limit else None,
+            "subscription_status": "trial",
+            "created_at": now_iso(),
+        })
+
     doc = {
         "id": uid,
         "email": body.email.lower(),
@@ -34,6 +49,8 @@ async def register(body: RegisterReq):
         "password": hash_pw(body.password),
         "wallet_balance": 50.0,  # 50 INR welcome bonus
         "user_type": user_type,
+        "role": "admin" if user_type == "corporate" else "individual",
+        "company_id": company_id,
         "corporate_name": (body.corporate_name or "").strip() if user_type == "corporate" else None,
         "subscription_plan": (body.subscription_plan or "").strip() if user_type == "corporate" else None,
         "employee_limit": int(body.employee_limit) if (user_type == "corporate" and body.employee_limit) else None,

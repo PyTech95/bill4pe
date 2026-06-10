@@ -11,6 +11,7 @@ import Contact from '@/pages/Contact';
 import Login from '@/pages/auth/Login';
 import PhoneLogin from '@/pages/auth/PhoneLogin';
 import Register from '@/pages/auth/Register';
+import AcceptInvite from '@/pages/auth/AcceptInvite';
 import Splash from '@/pages/app/Splash';
 import Categories from '@/pages/app/Categories';
 import SubCategory from '@/pages/app/SubCategory';
@@ -26,6 +27,7 @@ import Trips from '@/pages/app/Trips';
 import Reports from '@/pages/app/Reports';
 import Profile from '@/pages/app/Profile';
 import Referrals from '@/pages/app/Referrals';
+import CompanyDashboard from '@/pages/app/CompanyDashboard';
 import AppShell from '@/components/AppShell';
 
 const Private = ({ children }) => {
@@ -46,9 +48,11 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/login/phone" element={<PhoneLogin />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
 
           <Route path="/app" element={<Private><AppShell /></Private>}>
             <Route index element={<Splash />} />
+            <Route path="company" element={<CompanyDashboard />} />
             <Route path="categories" element={<Categories />} />
             <Route path="category/travel" element={<TravelSubCategory />} />
             <Route path="category/hotel" element={<HotelSubCategory />} />

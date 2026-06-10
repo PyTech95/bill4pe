@@ -205,6 +205,12 @@ export default function Dashboard() {
                 </div>
                 <div className="text-right">
                   <div className="font-mono font-bold text-navy">₹ {Number(e.total).toFixed(2)}</div>
+                  {e.approval_status === 'pending' && (
+                    <div className="text-[9px] mt-0.5 text-amber-600 font-semibold uppercase tracking-wider">Pending</div>
+                  )}
+                  {e.approval_status === 'rejected' && (
+                    <div className="text-[9px] mt-0.5 text-red-600 font-semibold uppercase tracking-wider">Rejected</div>
+                  )}
                   {e.bill_generated && <div className="text-[9px] mt-0.5 text-emerald-600 font-semibold uppercase tracking-wider">Bill</div>}
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-300 ml-1" />
