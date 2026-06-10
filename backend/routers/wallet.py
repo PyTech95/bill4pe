@@ -18,6 +18,11 @@ async def wallet(user=Depends(get_current_user)):
 
 @router.post("/wallet/recharge")
 async def recharge(body: WalletRecharge, user=Depends(get_current_user)):
+    if user.get("role") == "employee":
+        raise HTTPException(
+            403,
+            "Employees don't recharge personal wallets — your bills are billed to the company wallet. Ask your admin to recharge.",
+        )
     if body.amount <= 0:
         raise HTTPException(400, "Amount must be positive")
     if body.amount > 10000:

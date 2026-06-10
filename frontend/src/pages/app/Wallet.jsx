@@ -12,11 +12,13 @@ import { useAuth } from '@/lib/auth';
 const QUICK = [100, 200, 500, 1000];
 
 export default function Wallet() {
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [data, setData] = useState({ balance: 0, transactions: [] });
   const [open, setOpen] = useState(false);
   const [amt, setAmt] = useState(200);
   const [loading, setLoading] = useState(false);
+
+  const isEmployee = user?.role === 'employee';
 
   const load = async () => {
     const { data } = await api.get('/wallet');
@@ -54,8 +56,11 @@ export default function Wallet() {
             ₹ {data.balance.toFixed(2)}
           </div>
           <div className="text-[11px] text-white/60 mt-1.5 leading-snug">
-            Prepaid pool · auto-adjusted against ₹5 convenience fee per generated bill. New users get ₹50 free credit.
+            {isEmployee
+              ? 'Your bills are billed to the company wallet — your admin handles top-ups. Reach out to them if needed.'
+              : 'Prepaid pool · auto-adjusted against ₹5 convenience fee per generated bill. New users get ₹50 free credit.'}
           </div>
+          {!isEmployee && (
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <button
@@ -100,6 +105,7 @@ export default function Wallet() {
               </Button>
             </SheetContent>
           </Sheet>
+          )}
         </div>
       </div>
 

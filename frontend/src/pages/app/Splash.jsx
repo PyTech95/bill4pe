@@ -109,13 +109,19 @@ export default function Splash() {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => nav('/app/wallet')}
-            data-testid="splash-recharge-btn"
-            className="press-down text-xs font-semibold text-navy underline underline-offset-2 hover:text-[#152042] shrink-0"
-          >
-            + Recharge
-          </button>
+          {user?.role === 'employee' ? (
+            <div className="text-[10px] text-slate-400 max-w-[40%] text-right leading-tight">
+              Company wallet handles billing
+            </div>
+          ) : (
+            <button
+              onClick={() => nav('/app/wallet')}
+              data-testid="splash-recharge-btn"
+              className="press-down text-xs font-semibold text-navy underline underline-offset-2 hover:text-[#152042] shrink-0"
+            >
+              + Recharge
+            </button>
+          )}
         </div>
 
         {/* compact 3-stat row */}
