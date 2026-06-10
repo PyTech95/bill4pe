@@ -63,7 +63,8 @@ export default function PayNow() {
   const [stage, setStage] = useState('scan');
   const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '', txnId: '', method: 'UPI' });
   const [geo, setGeo] = useState({ lat: null, lng: null });
-  const [scanStatus, setScanStatus] = useState('starting'); // starting | running | error | denied | inapp
+  const [scanStatus, setScanStatus] = useState('idle'); // idle | starting | running | error | denied | inapp
+  const [cameraRequested, setCameraRequested] = useState(false);
   const [scanError, setScanError] = useState('');
   const [browserInfo] = useState(() => detectInAppBrowser());
   const [cameraList, setCameraList] = useState([]);
@@ -399,15 +400,26 @@ export default function PayNow() {
     }, 400);
   }, [browserInfo, useFrontCamera, startDecodeLoop, snapshotDiag]);
 
-  // Trigger camera when stage becomes 'scan'; teardown on leave
+  // DO NOT auto-start the camera on mount.
+  // iOS Safari + many Android in-app browsers ONLY grant getUserMedia inside a
+  // direct user-gesture (click/touch) handler. Auto-starting after navigation
+  // is the #1 reason this used to silently hang on real devices. Instead, we
+  // show a tap-to-start screen and call startCamera() from the button's onClick.
+  // The camera is still torn down when the user leaves the scan stage.
   useEffect(() => {
-    if (stage !== 'scan') return;
-    startCamera();
     return () => {
-      startTokenRef.current++; // invalidate any pending start
+      startTokenRef.current++;
       stopCamera();
     };
-  }, [stage, startCamera, stopCamera]);
+  }, [stopCamera]);
+
+  const handleStartCameraTap = () => {
+    setCameraRequested(true);
+    setScanError('');
+    setScanStatus('starting');
+    // Call inside the click handler so iOS Safari treats this as a fresh user gesture
+    startCamera();
+  };
 
   const switchCamera = async () => {
     if (cameraList.length < 2) return;
@@ -423,6 +435,7 @@ export default function PayNow() {
     stopCamera();
     setScanError('');
     setScanStatus('starting');
+    setCameraRequested(true);
     setTimeout(() => startCamera(), 60);
   };
 
@@ -431,6 +444,7 @@ export default function PayNow() {
   // (iOS PWA standalone, locked-down work profiles, older Android WebViews, etc.)
   const enterManually = () => {
     stopCamera();
+    setCameraRequested(false);
     setStage('confirm');
     toast.info('UPI ID aur Merchant Name manually bharkar payment kariye.');
   };
@@ -633,6 +647,31 @@ export default function PayNow() {
               {scanStatus === 'running' && (
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                   <div className="w-[70%] aspect-square border-2 border-lime/70 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                </div>
+              )}
+
+              {/* Tap-to-start screen — DEFAULT state. iOS Safari requires getUserMedia
+                  to be called inside a user gesture, so we wait for the user to tap. */}
+              {!cameraRequested && scanStatus === 'idle' && (
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-navy via-navy-light to-navy flex flex-col items-center justify-center text-white text-center px-6">
+                  <div className="w-20 h-20 rounded-full bg-lime/15 grid place-items-center mb-4 ring-2 ring-lime/30">
+                    <QrCode className="w-9 h-9 text-lime" />
+                  </div>
+                  <div className="text-base font-bold">Scan QR Code</div>
+                  <div className="mt-1.5 text-[12px] text-white/70 leading-snug max-w-[260px]">
+                    Tap the button below to open camera and scan any UPI QR code
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStartCameraTap}
+                    data-testid="start-camera-btn"
+                    className="press-down mt-5 inline-flex items-center gap-2 h-12 px-7 bg-lime text-navy rounded-full font-bold text-sm shadow-lg shadow-lime/30"
+                  >
+                    <QrCode className="w-4 h-4" /> Open Camera
+                  </button>
+                  <div className="mt-3 text-[10px] text-white/50">
+                    Permission prompt aaye to <b className="text-lime/90">Allow</b> kariye
+                  </div>
                 </div>
               )}
 
