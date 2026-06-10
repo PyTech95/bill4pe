@@ -14,7 +14,7 @@ export default function LegalLayout({ title, updatedOn, children }) {
       <header className="border-b border-soft">
         <div className="max-w-3xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="bg-white inline-flex items-center p-1.5 rounded-lg border border-soft">
-            <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-12 w-auto object-contain" />
+            <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto object-contain" />
           </Link>
           <Link
             to="/"

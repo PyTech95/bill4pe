@@ -903,7 +903,7 @@ const Footer = () => (
     <div className="grid md:grid-cols-12 gap-10">
       <div className="md:col-span-7">
         <div className="bg-white inline-flex items-center p-3 rounded-2xl">
-          <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-24 w-auto object-contain" />
+          <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-24 w-auto object-contain" />
         </div>
         <p className="mt-6 text-white/50 max-w-md">
           Pay Your Bill — AI Powered Expense & Invoice Platform.
@@ -956,7 +956,7 @@ const MobileLanding = () => {
       {/* top bar with logo */}
       <div className="relative px-5 pt-6 pb-2 flex items-center justify-between">
         <div className="bg-white inline-flex items-center px-2 py-1.5 rounded-xl" data-testid="mobile-nav-logo">
-          <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-12 w-auto object-contain" />
+          <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto object-contain" />
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -1054,7 +1054,7 @@ export default function Landing() {
         <nav className="absolute top-0 left-0 right-0 z-40">
           <div className="px-5 md:px-10 lg:px-20 h-16 flex items-center justify-between text-white">
             <Link to="/" data-testid="nav-logo" className="bg-white inline-flex items-center p-1.5 rounded-xl">
-              <img src="/logo.png" alt="Bill4Pe — The Intelligent Building" className="h-14 w-auto object-contain" />
+              <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-14 w-auto object-contain" />
             </Link>
             <div className="flex items-center gap-2">
               <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full hover:bg-white/10 text-sm" data-testid="nav-login">Sign in</Link>
