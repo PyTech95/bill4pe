@@ -937,6 +937,31 @@ export default function PayNow() {
               ))}
             </div>
 
+            {/* Helper card — surfaces alternatives when a UPI app returns with failure
+                (UPI risk policy, daily-limit, bank-block, etc.). Users often return
+                from a failed external Paytm/GPay flow and don't know what to do next. */}
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3 mt-1">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-[12px] font-bold text-amber-900 leading-snug">
+                    Payment failed in your UPI app?
+                  </div>
+                  <div className="mt-1 text-[11px] text-amber-900/85 leading-snug">
+                    UPI risk policy / daily-limit blocks are <b>not</b> our system. Try a <b>different UPI app</b> above (GPay/PhonePe/BHIM use different bank rails), or switch to <b>Cash</b> mode below and mark it paid.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMerchant((m) => ({ ...m, method: 'Cash' }))}
+                    data-testid="switch-to-cash-btn"
+                    className="press-down mt-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-amber-900 text-amber-50 text-[11px] font-bold"
+                  >
+                    Switch to Cash mode
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="pt-1 text-center text-[11px] font-bold text-navy">
               Total: ₹{total.toFixed(2)}
             </div>
