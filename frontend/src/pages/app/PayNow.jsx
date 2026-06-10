@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
-import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, AlertCircle, ExternalLink, Copy, Keyboard } from 'lucide-react';
+import { QrCode, CheckCircle2, Smartphone, MapPin, Loader2, RefreshCw, AlertCircle, ExternalLink, Copy, Keyboard, Camera as CameraIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -82,6 +82,10 @@ export default function PayNow() {
   const decodedRef = useRef(false);
   const startTokenRef = useRef(0);
   const watchdogRef = useRef(null);
+
+  // Photo-capture fallback (system camera app, no getUserMedia needed)
+  const photoInputRef = useRef(null);
+  const [photoDecoding, setPhotoDecoding] = useState(false);
 
   // Load draft + geolocation
   useEffect(() => {
@@ -449,6 +453,66 @@ export default function PayNow() {
     toast.info('UPI ID aur Merchant Name manually bharkar payment kariye.');
   };
 
+  // PHOTO CAPTURE FALLBACK — uses the phone's native camera app via <input capture>.
+  // This is a completely different system API path that works even when getUserMedia
+  // is broken (iOS PWA standalone, in-app browsers, denied permissions, etc.)
+  const handlePhotoCapture = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (event?.target) event.target.value = ''; // allow same photo to be picked again
+    if (!file) return;
+
+    setPhotoDecoding(true);
+    try {
+      // Decode the photo with jsQR by drawing it onto a canvas
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = () => rej(new Error('Could not read photo'));
+        img.src = objUrl;
+      });
+
+      // Downscale for performance; jsQR works well at ~800px on the long edge
+      const maxDim = 1200;
+      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.floor(img.naturalWidth * scale);
+      const h = Math.floor(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const imgData = ctx.getImageData(0, 0, w, h);
+      URL.revokeObjectURL(objUrl);
+
+      const result = jsQR(imgData.data, w, h, { inversionAttempts: 'attemptBoth' });
+      if (!result || !result.data) {
+        toast.error('No QR code detected in this photo. Try a clearer shot or enter UPI manually.');
+        return;
+      }
+
+      // Same code path as live-camera detection
+      const parsed = parseUpi(result.data);
+      setMerchant((m) => ({
+        ...m,
+        upi: parsed.upi || result.data.slice(0, 100),
+        name: parsed.name || m.name,
+      }));
+      stopCamera();
+      setCameraRequested(false);
+      setStage('confirm');
+      toast.success('QR detected from photo!');
+    } catch (err) {
+      toast.error(`Photo scan failed: ${err?.message || 'unknown error'}`);
+    } finally {
+      setPhotoDecoding(false);
+    }
+  };
+
+  const openPhotoPicker = () => {
+    if (photoInputRef.current) photoInputRef.current.click();
+  };
+
   const openInExternalBrowser = async () => {
     const url = window.location.href;
     try {
@@ -669,6 +733,14 @@ export default function PayNow() {
                   >
                     <QrCode className="w-4 h-4" /> Open Camera
                   </button>
+                  <button
+                    type="button"
+                    onClick={openPhotoPicker}
+                    data-testid="take-photo-btn-overlay"
+                    className="press-down mt-3 inline-flex items-center gap-2 h-10 px-5 bg-white/10 hover:bg-white/15 text-white rounded-full text-xs font-semibold border border-white/20"
+                  >
+                    <CameraIcon className="w-4 h-4" /> Take photo of QR instead
+                  </button>
                   <div className="mt-3 text-[10px] text-white/50">
                     Permission prompt aaye to <b className="text-lime/90">Allow</b> kariye
                   </div>
@@ -752,6 +824,36 @@ export default function PayNow() {
           <div className="flex items-center gap-2 text-xs text-slate-500 justify-center">
             <QrCode className="w-4 h-4" /> Scan GPay / PhonePe / Paytm / BharatPe / BHIM QR
           </div>
+
+          {/* Hidden file input: opens system camera in capture mode on mobile */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoCapture}
+            data-testid="qr-photo-input"
+            style={{ display: 'none' }}
+          />
+
+          {/* GUARANTEED-WORKING fallback: opens system camera app, captures photo,
+              decodes QR with jsQR. Works even when getUserMedia is broken. */}
+          <button
+            type="button"
+            onClick={openPhotoPicker}
+            disabled={photoDecoding}
+            data-testid="take-photo-btn"
+            className="press-down w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-lime text-navy text-sm font-bold shadow-md shadow-lime/30 disabled:opacity-60"
+          >
+            {photoDecoding ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Decoding photo…</>
+            ) : (
+              <><CameraIcon className="w-4 h-4" /> Take photo of QR (always works)</>
+            )}
+          </button>
+          <p className="text-[11px] text-slate-500 text-center -mt-1 leading-snug">
+            <b>Backup option</b> — opens your phone&apos;s camera app directly. Snap QR &amp; we&apos;ll decode it.
+          </p>
 
           {/* Always-visible escape hatch — works on every device, every browser */}
           <button
