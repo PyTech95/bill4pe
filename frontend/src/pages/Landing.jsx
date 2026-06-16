@@ -515,7 +515,7 @@ const PhoneShowcase = () => {
             onClick={() => setActive(i)}
             data-testid={`phone-dot-${s.key}`}
             className="relative h-1.5 rounded-full transition-all"
-            style={{ width: i === active ? 28 : 8, background: i === active ? '#FFC02C' : 'rgba(255,255,255,0.25)' }}
+            style={{ width: i === active ? 28 : 8, background: i === active ? '#D2690D' : 'rgba(255,255,255,0.25)' }}
             aria-label={s.label}
           />
         ))}
