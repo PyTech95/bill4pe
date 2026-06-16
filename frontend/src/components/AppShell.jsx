@@ -25,7 +25,7 @@ const TopBar = () => {
           </button>
         ) : (
           <div className="inline-flex items-center gap-2" data-testid="appshell-logo">
-            <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto rounded-md object-contain" />
+            <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto rounded-md object-contain" />
             {isCorporate && (
               <span
                 data-testid="appshell-corporate-chip"

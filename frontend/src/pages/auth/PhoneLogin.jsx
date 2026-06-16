@@ -69,7 +69,7 @@ export default function PhoneLogin() {
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
         <Link to="/" className="self-start bg-white inline-flex items-center p-3 rounded-xl">
-          <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
+          <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Sign in with your phone.</div>
@@ -88,7 +88,7 @@ export default function PhoneLogin() {
         </Link>
         <div className="w-full max-w-sm">
           <Link to="/" className="md:hidden mb-8 bg-white inline-flex items-center p-2 rounded-xl">
-            <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
+            <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
           </Link>
 
           {step === 'phone' && (

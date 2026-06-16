@@ -45,7 +45,7 @@ export default function AcceptInvite() {
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
         <Link to="/" className="self-start bg-white inline-flex items-center p-3 rounded-xl">
-          <img src="/logo.png?v=5" alt="Bil4Pe" className="h-20 w-auto object-contain" />
+          <img src="/logo.png?v=6" alt="Bil4Pe" className="h-20 w-auto object-contain" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">
@@ -69,7 +69,7 @@ export default function AcceptInvite() {
 
         <form onSubmit={accept} className="w-full max-w-sm py-12" data-testid="invite-form">
           <div className="md:hidden bg-white inline-flex items-center p-2 rounded-xl mb-8">
-            <img src="/logo.png?v=5" alt="Bil4Pe" className="h-14 w-auto object-contain" />
+            <img src="/logo.png?v=6" alt="Bil4Pe" className="h-14 w-auto object-contain" />
           </div>
 
           {error ? (

@@ -67,7 +67,7 @@ export default function Contact() {
       <header className="relative border-b border-white/10">
         <div className="max-w-5xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="bg-white inline-flex items-center p-1.5 rounded-lg" data-testid="contact-nav-logo">
-            <img src="/logo.png?v=5" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto object-contain" />
+            <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-12 w-auto object-contain" />
           </Link>
           <Link
             to="/"
