@@ -1,6 +1,16 @@
 # BILL4PE — Product Requirements Document
 
 
+## What's Been Verified — 2026-06-17 (P0 final E2E — PayNow "Save Unpaid" + Corporate Employee flow)
+- User asked to "make sure both will work": (1) QR payment fallback when 3rd-party UPI apps (Paytm Risk Policy) block payment, (2) Corporate employee login & bill generation flow.
+- **Result via `testing_agent_v3_fork` iteration_8.json — 100% pass on both fronts** (9/9 new P0 regression cases + 21/21 prior corporate-B2B cases still green):
+  - ✅ PayNow `save-unpaid-btn` → backend persists expense with `payment_status='unpaid'`, `payment_method='Unpaid'`, placeholder `UNPAID-<ts>` txn id, then routes to `/app/bill/{id}`.
+  - ✅ Corporate full E2E: admin register → /app/company → create employee (temp_password returned) → employee login → POST /api/expenses auto-sets `approval_status='pending'` → admin POST `/api/company/approvals/{eid}/approve` (must send body `{notes:''}`) → employee POST `/api/bills/{id}/generate` succeeds → **COMPANY wallet debited exactly ₹5**, employee personal wallet UNCHANGED.
+  - ✅ Employee personal wallet recharge correctly returns 4xx ("Employees don't recharge personal wallets").
+  - ✅ Company dashboard renders 4 tabs (`company-tab-overview/employees/approvals/wallet`).
+- **Important note for user**: Fixes are live in Preview only. **User must redeploy Preview → Production** to see these on the live `ai-payment-workflow.emergent.host` site. The Paytm "Risk Policy" block itself is a Paytm/bank-side decision that cannot be bypassed by app code — the in-app "Payment didn't go through? Save expense anyway" button is the supported workaround.
+
+
 ## What's Been Implemented — 2026-02-10 (Corporate B2B Dashboard, Employee Management, Approval Flow)
 - **Scope**: Full corporate / B2B workflow. Corporate admins land on a dedicated Company Dashboard, can manage employees (add with temp password OR invite via link), approve/reject employee bills, and recharge a centralized company wallet that pays the ₹5 fee for ALL employee-generated bills.
 - **Backend (new)**:
