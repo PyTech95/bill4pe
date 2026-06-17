@@ -579,13 +579,23 @@ export default function PayNow() {
     }
   };
 
-  const submit = async () => {
+  const submit = async (opts = {}) => {
+    const { skipped = false } = opts;
     const isCash = merchant.method === 'Cash';
     if (!merchant.name?.trim()) { toast.error('Merchant Name required'); return; }
     if (!isCash && !merchant.upi?.trim()) { toast.error('Merchant UPI required'); return; }
-    if (!isCash && !merchant.txnId?.trim()) { toast.error('Enter Transaction ID after paying'); return; }
+    // UTR is optional. If user is saving without paying, we mark it pending.
+    if (!isCash && !skipped && !merchant.txnId?.trim()) {
+      toast.error('Enter UTR after paying, or tap "Payment didn\'t go through" to save anyway');
+      return;
+    }
     setStage('submitting');
     try {
+      const txnId = isCash
+        ? (merchant.txnId?.trim() || `CASH-${Date.now()}`)
+        : skipped
+          ? (merchant.txnId?.trim() || `UNPAID-${Date.now()}`)
+          : merchant.txnId;
       const payload = {
         category: draft.category,
         sub_category: draft.sub_category,
@@ -595,11 +605,12 @@ export default function PayNow() {
           merchant_name: merchant.name,
           merchant_upi: isCash ? '' : merchant.upi,
           merchant_mobile: merchant.mobile,
-          transaction_id: isCash ? (merchant.txnId?.trim() || `CASH-${Date.now()}`) : merchant.txnId,
+          transaction_id: txnId,
+          payment_status: skipped ? 'unpaid' : 'paid',
           amount: total,
           latitude: geo.lat,
           longitude: geo.lng,
-          payment_method: merchant.method,
+          payment_method: skipped ? 'Unpaid' : merchant.method,
           ...(draft.trip_meta ? { trip: draft.trip_meta } : {}),
           ...(draft.stay_meta ? { stay: draft.stay_meta } : {}),
         },
@@ -607,7 +618,7 @@ export default function PayNow() {
       const { data } = await api.post('/expenses', payload);
       sessionStorage.removeItem('bill4pe_draft');
       await refreshUser();
-      toast.success('Payment captured!');
+      toast.success(skipped ? 'Expense saved (unpaid)' : 'Payment captured!');
       nav(`/app/bill/${data.id}`);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Could not save expense');
@@ -948,7 +959,10 @@ export default function PayNow() {
                     Payment failed in your UPI app?
                   </div>
                   <div className="mt-1 text-[11px] text-amber-900/85 leading-snug">
-                    UPI risk policy / daily-limit blocks are <b>not</b> our system. Try a <b>different UPI app</b> above (GPay/PhonePe/BHIM use different bank rails), or switch to <b>Cash</b> mode below and mark it paid.
+                    UPI risk policy / daily-limit blocks are <b>not</b> our system. Either:
+                    <br />• Try a <b>different UPI app</b> above (GPay/PhonePe/BHIM use different bank rails)
+                    <br />• Switch to <b>Cash</b> mode below and mark it paid
+                    <br />• Or tap <b>&quot;Payment didn&apos;t go through? Save expense anyway&quot;</b> to continue
                   </div>
                   <button
                     type="button"
@@ -985,13 +999,13 @@ export default function PayNow() {
 
           <div className="flat-card p-5">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Confirm cash payment' : 'After paying'}</div>
-            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Receipt # (optional)' : 'UTR / Transaction ID'}</label>
+            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Receipt # (optional)' : 'UTR / Transaction ID (optional)'}</label>
             <Input value={merchant.txnId} onChange={(e) => setMerchant({ ...merchant, txnId: e.target.value })}
-                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder={merchant.method === 'Cash' ? 'e.g. receipt or memo no.' : '123456789012'} />
-            <p className="text-[11px] text-slate-400 mt-1">{merchant.method === 'Cash' ? 'Total cash paid: ₹' + total.toFixed(2) : 'From your UPI app receipt.'}</p>
+                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder={merchant.method === 'Cash' ? 'e.g. receipt or memo no.' : 'Enter UTR after paying, or skip'} />
+            <p className="text-[11px] text-slate-400 mt-1">{merchant.method === 'Cash' ? 'Total cash paid: ₹' + total.toFixed(2) : 'From your UPI app receipt. Skip if payment failed.'}</p>
             <Button
               data-testid="confirm-payment-btn"
-              onClick={submit}
+              onClick={() => submit()}
               disabled={stage === 'submitting'}
               className="w-full h-12 mt-4 bg-navy hover:bg-navy/90 text-white rounded-xl font-semibold"
             >
@@ -1001,6 +1015,17 @@ export default function PayNow() {
                 <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {merchant.method === 'Cash' ? 'Mark Cash Paid' : 'Confirm payment'}</span>
               )}
             </Button>
+            {merchant.method !== 'Cash' && (
+              <button
+                type="button"
+                data-testid="save-unpaid-btn"
+                onClick={() => submit({ skipped: true })}
+                disabled={stage === 'submitting'}
+                className="press-down w-full h-11 mt-2 rounded-xl border border-soft bg-white text-slate-600 text-[12px] font-semibold hover:border-amber-400 hover:text-amber-700 transition"
+              >
+                Payment didn&apos;t go through? Save expense anyway
+              </button>
+            )}
           </div>
         </div>
       )}

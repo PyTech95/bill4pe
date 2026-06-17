@@ -80,7 +80,8 @@ class PaymentInfo(BaseModel):
     amount: float
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    payment_method: str = "UPI"  # UPI/Cash/GPay/PhonePe/Paytm/BharatPe/BHIM
+    payment_method: str = "UPI"  # UPI/Cash/GPay/PhonePe/Paytm/BharatPe/BHIM/Unpaid
+    payment_status: Optional[str] = "paid"  # paid | unpaid (when user couldn't complete payment but still wants to save the expense)
     trip: Optional[TripInfo] = None
     stay: Optional[StayInfo] = None
 
