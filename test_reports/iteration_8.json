@@ -1,0 +1,37 @@
+{
+  "summary": "P0 verification for BILL4PE iteration_8: (1) PayNow 'Save Unpaid' fallback and (2) Corporate full E2E (admin→employee→pending expense→approval→bill from company wallet). All 9 new P0 regression cases passed and all 21 prior corporate-B2B cases still pass. Frontend smoke: save-unpaid-btn renders on /app/pay confirm stage AND clicking it saves an unpaid expense and routes to /app/bill/{id}. Company dashboard renders all 4 tabs (testids: company-tab-overview/employees/approvals/wallet) for admin users.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p0_regression.py",
+    "/app/backend/tests/test_corporate_b2b.py",
+    "/app/test_reports/pytest/pytest_p0_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PayNow.jsx 'save-unpaid-btn' correctly sends payment_status='unpaid', payment_method='Unpaid', and uses an UNPAID-<ts> transaction_id placeholder when UTR is empty. Backend persists the expense and GET returns payment.payment_status='unpaid'. Verified.",
+    "expenses.py create_expense: approval_status='pending' for role==employee with company_id, 'approved' for admins/individuals — verified via E2E.",
+    "bills.py generate_bill: employee bills with approval_status!='approved' are correctly gated (422/400/403), and on approval the COMPANY wallet is debited ₹5 while the employee personal wallet remains unchanged. Verified delta = exactly 5.00.",
+    "wallet.py recharge: returns 4xx for role==employee with company_id ('Employees don\\'t recharge personal wallets'). Verified.",
+    "Company tab testids in CompanyDashboard.jsx use the `company-tab-*` prefix (not `tab-*`). Documenting for next testing agent — earlier expectation of `tab-*` is incorrect.",
+    "PayNow page entry is the QR scanner stage; 'manual-entry-btn' must be clicked first to reveal merchant-name/upi/mobile inputs and the confirm/save-unpaid buttons. Frontend flow is correct, no bug.",
+    "GET /api/expenses returns object shape `{expenses: []}` (not a bare list). Frontend code already handles this; documenting for tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p0_regression.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new P0 + 21/21 prior corporate)", "frontend": "100% (PayNow save-unpaid render+submit; Company 4 tabs render)"},
+  "test_credentials": "Phone OTP login: any 10-digit phone + OTP '123456'. Corporate admin created per run via POST /api/auth/register with user_type='corporate', unique email admin_<ts>@democorp.com, password='test123'.",
+  "seed_data_creation": "Each pytest run creates: a fresh individual user via OTP, a fresh corporate admin, and 2 employees under that company. No production data touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Authoritative selectors verified live on /app/pay confirm stage: merchant-name-input, merchant-upi-input, merchant-mobile-input, payment-mode-toggle, paymode-upi-btn, paymode-cash-btn, upi-app-picker, pay-gpay-btn, pay-phonepe-btn, pay-paytm-btn, pay-bhim-btn, pay-amazon-btn, pay-whatsapp-btn, pay-other-btn, switch-to-cash-btn, copy-upi-btn, txn-id-input, confirm-payment-btn, save-unpaid-btn. /app/company tabs: company-tab-overview, company-tab-employees, company-tab-approvals, company-tab-wallet. To reach the PayNow confirm stage from a fresh session: seed sessionStorage 'bill4pe_draft' with {category,sub_category,items:[{name,quantity,unit_price}],notes}, set localStorage 'bill4pe_token' AND 'bill4pe_user' (JSON string), navigate to /app/pay, close onboarding-overlay if present, click manual-entry-btn. Note: POST /api/company/approvals/{eid}/approve REQUIRES a JSON body (e.g. {notes:''}) — empty body returns 422. Expense item schema requires unit_price (not price). GET /api/expenses returns {expenses:[]} shape.",
+  "rca of the issue": "No issues found. Both P0 user concerns are resolved: (a) PayNow save-unpaid-btn works end-to-end — backend creates expense with payment_status='unpaid' and frontend routes to /app/bill/{id}. (b) Corporate full E2E confirmed — employee expense auto-pending, admin can approve, employee's bill debits ONLY the company wallet (₹5 delta) while personal wallet is untouched. Employee personal wallet recharge is correctly blocked (4xx). All prior corporate-B2B regression and individual-user flows still pass."
+}
