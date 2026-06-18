@@ -712,7 +712,7 @@ const VisionMission = () => (
           Instant, authenticated self-invoices for unregistered-supplier expenses.
         </h3>
         <p
-          className="mt-5 text-white/70 leading-[1.75] text-[13.5px] hyphens-auto"
+          className="mt-5 text-white font-bold leading-[1.75] text-[13.5px] hyphens-auto"
           style={{ textAlign: 'justify', textAlignLast: 'left', textJustify: 'inter-word' }}
           data-testid="mission-text"
         >
