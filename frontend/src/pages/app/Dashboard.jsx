@@ -192,7 +192,7 @@ export default function Dashboard() {
                 data-testid={`expense-row-${e.id}`}
                 className="press-down w-full flat-card p-4 flex items-center gap-3 text-left hover:border-navy"
               >
-                <div className="w-10 h-10 rounded-xl bg-navy text-brand grid place-items-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-navy text-white grid place-items-center shrink-0">
                   <Icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">

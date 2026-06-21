@@ -283,7 +283,7 @@ export default function SubCategory() {
     <div className="pb-32 space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl bg-navy text-brand grid place-items-center">
+        <div className="w-11 h-11 rounded-2xl bg-navy text-white grid place-items-center">
           <Icon className="w-5 h-5" />
         </div>
         <div>

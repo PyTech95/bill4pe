@@ -99,7 +99,7 @@ export default function Splash() {
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#050816] text-brand grid place-items-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-navy text-white grid place-items-center shrink-0">
               <WalletIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">

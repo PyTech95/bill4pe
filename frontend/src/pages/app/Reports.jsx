@@ -156,7 +156,7 @@ export default function Reports() {
                         className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${isOn ? 'border-brand bg-brand/5' : 'border-soft hover:border-navy'}`}
                       >
                         <Checkbox checked={isOn} onCheckedChange={() => toggle(e.id)} />
-                        <div className="w-9 h-9 rounded-lg bg-navy text-brand grid place-items-center shrink-0">
+                        <div className="w-9 h-9 rounded-lg bg-navy text-white grid place-items-center shrink-0">
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">

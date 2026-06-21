@@ -82,7 +82,7 @@ export default function Profile() {
       {/* Identity */}
       <div className="flat-card p-5">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-navy text-brand grid place-items-center font-display font-bold text-xl">
+          <div className="w-14 h-14 rounded-2xl bg-navy text-white grid place-items-center font-display font-bold text-xl">
             {(user?.name || 'U')[0].toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -99,7 +99,7 @@ export default function Profile() {
       {user?.user_type === 'corporate' && (
         <div className="flat-card p-5 border-brand/40 bg-brand/5" data-testid="corporate-badge-card">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-navy text-brand grid place-items-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-navy text-white grid place-items-center shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">

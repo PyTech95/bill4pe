@@ -30,7 +30,7 @@ const TopBar = () => {
               <span
                 data-testid="appshell-corporate-chip"
                 title={user?.corporate_name || 'Corporate'}
-                className="inline-flex items-center gap-1 bg-navy text-brand text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                className="inline-flex items-center gap-1 bg-navy text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
               >
                 <Building2 className="w-3 h-3" />
                 <span className="max-w-[100px] truncate">{user?.corporate_name || 'Corporate'}</span>
@@ -41,7 +41,7 @@ const TopBar = () => {
         <button
           onClick={() => navigate('/app/profile')}
           data-testid="topbar-profile-btn"
-          className="press-down w-9 h-9 rounded-full bg-navy text-brand grid place-items-center font-display font-bold text-sm hover:bg-[#0F1631]"
+          className="press-down w-9 h-9 rounded-full bg-navy text-white grid place-items-center font-display font-bold text-sm hover:bg-[#0F1631]"
           title="Profile"
         >
           <User className="w-4 h-4" />

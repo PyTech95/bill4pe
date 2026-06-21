@@ -186,7 +186,7 @@ export default function Referrals() {
           <div className="mt-3 space-y-2">
             {data.referrals.map((r) => (
               <div key={r.id} className="flat-card p-3 flex items-center gap-3" data-testid={`referral-row-${r.id}`}>
-                <div className="w-9 h-9 rounded-full bg-navy text-brand font-display font-bold text-sm grid place-items-center">
+                <div className="w-9 h-9 rounded-full bg-navy text-white font-display font-bold text-sm grid place-items-center">
                   {(r.referee_name || 'F')[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">

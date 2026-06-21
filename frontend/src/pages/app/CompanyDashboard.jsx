@@ -283,7 +283,7 @@ const Employees = ({ onChange, limit, count }) => {
               data-testid={`emp-row-${e.id}`}
               className="rounded-2xl border border-soft bg-white p-3 flex items-center gap-3"
             >
-              <div className="w-10 h-10 rounded-full bg-navy text-brand grid place-items-center font-display font-bold shrink-0">
+              <div className="w-10 h-10 rounded-full bg-navy text-white grid place-items-center font-display font-bold shrink-0">
                 {(e.name || '?').slice(0, 1).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

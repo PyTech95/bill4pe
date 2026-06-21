@@ -23,7 +23,7 @@ export default function Categories() {
             data-testid={`cat-${key}-card`}
             className="press-down group flat-card p-3 text-left hover:border-navy transition-colors flex items-center gap-3"
           >
-            <div className="w-11 h-11 rounded-xl bg-[#050816] text-brand grid place-items-center shrink-0 group-hover:bg-brand group-hover:text-white transition-colors">
+            <div className="w-11 h-11 rounded-xl bg-navy text-white grid place-items-center shrink-0 group-hover:bg-brand group-hover:text-white transition-colors">
               <Icon className="w-5 h-5" strokeWidth={1.8} />
             </div>
             <div className="flex-1 min-w-0">
