@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 9 E2E for BILL4PE: phone OTP auth, 1% bill-generation fee (with ₹1 minimum), and public bill verification flow. All 6 new pytest backend cases pass and all 3 new Playwright UI scenarios pass (mobile viewport).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_billfee_verify.py",
+    "/app/test_reports/pytest/pytest_iter9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/config.calc_bill_fee correctly returns round(max(1.0, total*0.01), 2). Verified: 500→5.00, 50→1.00, persisted in expense.bill_fee.",
+    "routers/bills.py generate_bill: bill_id format `B4P-YYYYMMDD-XXXXXX` (first 6 chars of expense uuid uppercased) — matches pattern. Response shape {bill_id, wallet_balance, fee} all correct.",
+    "routers/verify.py: public endpoint exposes only first name (split on first space) and minimal merchant/amount fields — no PII leak. Returns valid:false for unknown / not-yet-generated bills; no 500 path observed for bogus IDs.",
+    "frontend Verify.jsx uses ternary for testid which means verify-status-invalid renders even while data is loading (`valid=false` initially). Not a bug but a tester note — assert on text 'Not a valid' rather than just selector to avoid false positives.",
+    "BillGen.jsx fee derivation `Math.max(1, Number((total*0.01).toFixed(2)))` matches backend calc_bill_fee. Generate-sheet copy 'Bill generation fee (1% of bill)' and dynamic Pay ₹X.XX button verified end-to-end.",
+    "Auth: OTP flow (request → verify with '123456' → JWT → /api/auth/me) returns full user incl wallet_balance=50 signup bonus. No issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_billfee_verify.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6 new pytest)", "frontend": "100% (3/3 Playwright scenarios: valid verify page, invalid verify page, BillGen fee 1% + MIN ₹1)"},
+  "test_credentials": "Phone OTP: any 10-digit phone + OTP '123456' (mocked). Each test creates a fresh phone-OTP user with ₹50 signup bonus.",
+  "seed_data_creation": "Each test run creates: 1 OTP user per pytest module (random 9-digit phone), 1-2 paid food expenses (total=500 and total=50), bills generated against personal wallet. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public verify endpoint is GET /api/public/verify/{bill_id} — no auth required, returns {valid, bill_id, merchant_name, merchant_upi, category, sub_category, amount, fee, grand_total, customer_name (first name only), issued_at}. Frontend route is /verify/:billId (NOT /app/verify), unauthenticated public page. Testids: verify-page, verify-status-valid|invalid, verify-details. Note: both status testids share the same element (ternary on `valid`), so wait on TEXT not just the selector when asserting invalid state. BillGen testids: open-generate-sheet-btn, bill-fee-amount, confirm-generate-btn, recharge-wallet-btn (shown when wallet<fee). To skip onboarding overlay in /app routes, also seed localStorage 'bill4pe_onboarded'='true' if needed. Fast path to BillGen: seed localStorage bill4pe_token + bill4pe_user (JSON string) and navigate to /app/bill/{expense_id} for a paid expense.",
+  "rca of the issue": "No issues found. All three feature areas — 1% bill fee (with ₹1 MIN), public bill verification, and BillGen UI dynamic fee copy — work as specified. Bill ID format `B4P-YYYYMMDD-XXXXXX` confirmed. Wallet debit matches fee exactly (500→fee 5.00, wallet drops by 5; 50→fee 1.00 not 0.50). Verify page shows green 'Verified ✓ Authentic bill' for real bills with grand total ₹505, merchant 'T', first-name-only customer, and shows 'Not a valid BILL4PE bill' for bogus IDs without 500."
+}

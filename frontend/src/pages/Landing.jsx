@@ -474,7 +474,7 @@ const PhoneShowcase = () => {
         className="absolute -right-6 bottom-24 z-20 hidden sm:flex items-center gap-1.5 bg-lime text-navy px-3 py-1.5 rounded-full shadow-xl"
       >
         <IndianRupee className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold uppercase tracking-wider">₹5 = 1 Bill</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider">Just 1% per Bill</span>
       </motion.div>
 
       {/* phone frame — tilted */}

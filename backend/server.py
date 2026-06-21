@@ -21,6 +21,7 @@ from routers import (
     reports as reports_router,
     contact as contact_router,
     company as company_router,
+    verify as verify_router,
 )
 
 app = FastAPI(title="BILL4PE API")
@@ -36,6 +37,7 @@ api.include_router(bills_router.router)
 api.include_router(reports_router.router)
 api.include_router(contact_router.router)
 api.include_router(company_router.router)
+api.include_router(verify_router.router)
 
 
 @api.get("/")

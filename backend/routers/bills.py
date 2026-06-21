@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from core.config import BILL_FEE, JWT_SECRET
+from core.config import calc_bill_fee, JWT_SECRET
 from core.db import db
 from core.security import bearer, get_current_user, now_iso
 from services.pdf import build_pdf_bytes
@@ -36,44 +36,46 @@ async def generate_bill(eid: str, user=Depends(get_current_user)):
             raise HTTPException(403, "Bill is awaiting admin approval")
 
     bill_id = f"B4P-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{eid[:6].upper()}"
+    fee = calc_bill_fee(exp.get("total"))
 
     if user.get("role") == "employee" and user.get("company_id"):
         company = await db.companies.find_one({"id": user["company_id"]})
         if not company:
             raise HTTPException(404, "Company not found")
         bal = float(company.get("wallet_balance", 0.0))
-        if bal < BILL_FEE:
+        if bal < fee:
             raise HTTPException(
                 402,
-                f"Company wallet has insufficient balance. Need ₹{BILL_FEE}, have ₹{bal:.2f}. Ask your admin to recharge."
+                f"Company wallet has insufficient balance. Need ₹{fee:.2f}, have ₹{bal:.2f}. Ask your admin to recharge."
             )
-        new_bal = round(bal - BILL_FEE, 2)
+        new_bal = round(bal - fee, 2)
         await db.companies.update_one({"id": company["id"]}, {"$set": {"wallet_balance": new_bal}})
         await db.wallet_txns.insert_one({
             "id": str(uuid.uuid4()),
             "company_id": company["id"],
             "user_id": user["id"],
             "type": "debit",
-            "amount": BILL_FEE,
+            "amount": fee,
             "reason": f"Bill generation by {user.get('name')}: {bill_id}",
             "created_at": now_iso(),
         })
     else:
         u = await db.users.find_one({"id": user["id"]})
         bal = float(u.get("wallet_balance", 0.0))
-        if bal < BILL_FEE:
-            raise HTTPException(402, f"Insufficient wallet balance. Need ₹{BILL_FEE}, have ₹{bal:.2f}")
-        new_bal = round(bal - BILL_FEE, 2)
+        if bal < fee:
+            raise HTTPException(402, f"Insufficient wallet balance. Need ₹{fee:.2f}, have ₹{bal:.2f}")
+        new_bal = round(bal - fee, 2)
         await db.users.update_one({"id": user["id"]}, {"$set": {"wallet_balance": new_bal}})
         await db.wallet_txns.insert_one({
             "id": str(uuid.uuid4()), "user_id": user["id"], "type": "debit",
-            "amount": BILL_FEE, "reason": f"Bill generation: {bill_id}", "created_at": now_iso()
+            "amount": fee, "reason": f"Bill generation: {bill_id}", "created_at": now_iso()
         })
 
     await db.expenses.update_one({"id": eid}, {"$set": {
-        "bill_generated": True, "bill_id": bill_id, "bill_generated_at": now_iso()
+        "bill_generated": True, "bill_id": bill_id,
+        "bill_fee": fee, "bill_generated_at": now_iso()
     }})
-    return {"bill_id": bill_id, "wallet_balance": new_bal}
+    return {"bill_id": bill_id, "wallet_balance": new_bal, "fee": fee}
 
 
 @router.get("/bills/{eid}/pdf")

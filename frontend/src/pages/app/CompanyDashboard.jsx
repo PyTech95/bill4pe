@@ -185,7 +185,7 @@ const Overview = ({ stats, setTab }) => (
     />
     <Action
       label="Recharge company wallet"
-      desc="Used to pay ₹5 / bill across all employees."
+      desc="Used to pay 1% (min ₹1) per bill across all employees."
       onClick={() => setTab('wallet')}
       icon={WalletIcon}
       testid="overview-wallet-cta"
@@ -683,7 +683,7 @@ const CompanyWallet = ({ balance, onChange }) => {
           {inr(balance)}
         </div>
         <div className="text-[11px] text-white/60 mt-1">
-          Pays ₹5 per generated bill across all employees.
+          Pays 1% (min ₹1) of every bill generated across your employees.
         </div>
       </div>
 

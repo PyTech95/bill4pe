@@ -58,7 +58,7 @@ export default function Wallet() {
           <div className="text-[11px] text-white/60 mt-1.5 leading-snug">
             {isEmployee
               ? 'Your bills are billed to the company wallet — your admin handles top-ups. Reach out to them if needed.'
-              : 'Prepaid pool · auto-adjusted against ₹5 convenience fee per generated bill. New users get ₹50 free credit.'}
+              : 'Prepaid pool · auto-adjusted against the 1% convenience fee (min ₹1) per generated bill. New users get ₹50 free credit.'}
           </div>
           {!isEmployee && (
           <Sheet open={open} onOpenChange={setOpen}>

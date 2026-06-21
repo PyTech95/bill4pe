@@ -73,6 +73,7 @@ export default function BillGen() {
 
   if (!expense) return <div className="py-10 text-center text-slate-400">Loading...</div>;
   const pay = expense.payment || {};
+  const fee = Math.max(1, Number(((Number(expense.total) || 0) * 0.01).toFixed(2)));
 
   return (
     <div className="pb-10">
@@ -148,8 +149,8 @@ export default function BillGen() {
               <div className="flex items-center gap-3">
                 <Wallet className="w-5 h-5 text-navy" />
                 <div>
-                  <div className="text-xs text-slate-500">Bill generation fee</div>
-                  <div className="font-mono font-bold text-navy">₹ 5.00</div>
+                  <div className="text-xs text-slate-500">Bill generation fee (1% of bill)</div>
+                  <div className="font-mono font-bold text-navy" data-testid="bill-fee-amount">₹ {fee.toFixed(2)}</div>
                 </div>
               </div>
               <div className="text-right">
@@ -158,7 +159,7 @@ export default function BillGen() {
               </div>
             </div>
 
-            {(user?.wallet_balance || 0) < 5 ? (
+            {(user?.wallet_balance || 0) < fee ? (
               <Button
                 onClick={() => { setOpen(false); nav('/app/wallet'); }}
                 className="press-down w-full h-12 mt-5 bg-navy text-white hover:bg-[#152042] rounded-full font-semibold"
@@ -173,7 +174,7 @@ export default function BillGen() {
                 data-testid="confirm-generate-btn"
               >
                 {generating ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>)
-                  : 'Pay ₹5 from Wallet & Generate'}
+                  : `Pay ₹${fee.toFixed(2)} from Wallet & Generate`}
               </Button>
             )}
           </SheetContent>

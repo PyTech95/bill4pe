@@ -45,7 +45,7 @@ export default function Terms() {
       <H2>5. Fees</H2>
       <UL>
         <li>Creating an account and capturing expenses is free.</li>
-        <li>Bill generation costs <b>₹5 per invoice</b>, deducted from your in-app wallet.</li>
+        <li>Bill generation costs <b>1% of the bill amount (minimum ₹1)</b>, deducted from your in-app wallet.</li>
         <li>Wallet top-ups (when payment gateway is enabled) are processed by a licensed
             payment partner. Top-up amounts are non-refundable once credited, except where
             required by law.</li>

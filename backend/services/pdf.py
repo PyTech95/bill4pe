@@ -10,7 +10,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 
-from core.config import BILL_FEE
+from core.config import calc_bill_fee
 from core.security import now_iso
 
 
@@ -127,14 +127,16 @@ def build_pdf_bytes(expense: dict, user: dict) -> bytes:
                      f"{it['unit_price']:.2f}", f"{amt:.2f}"])
 
     subtotal = float(expense.get("total", 0) or 0)
-    # Convenience Fee row (charged when bill is generated)
+    # Convenience Fee row (charged when bill is generated) — 1% of subtotal, min ₹1
     show_fee = bool(expense.get("bill_generated"))
-    fee_amt = float(BILL_FEE) if show_fee else 0.0
+    fee_amt = float(expense.get("bill_fee") or 0.0) if show_fee else 0.0
+    if show_fee and not fee_amt:
+        fee_amt = calc_bill_fee(subtotal)
     grand_total = subtotal + fee_amt
 
     if show_fee:
         rows.append(["", "", "", "Subtotal", f"{subtotal:.2f}"])
-        rows.append(["", "Convenience Fee (Bill Generation)", "", "", f"{fee_amt:.2f}"])
+        rows.append(["", "Convenience Fee (1% of bill)", "", "", f"{fee_amt:.2f}"])
         rows.append(["", "", "", "GRAND TOTAL", f"₹ {grand_total:.2f}"])
     else:
         rows.append(["", "", "", "TOTAL", f"₹ {subtotal:.2f}"])
