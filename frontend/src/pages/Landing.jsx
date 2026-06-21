@@ -832,7 +832,7 @@ const Testimonials = () => {
 };
 
 const Contact = () => {
-  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [sending, setSending] = useState(false);
   const submit = async (e) => {
     e.preventDefault();
@@ -840,7 +840,7 @@ const Contact = () => {
     try {
       await api.post('/contact', form);
       toast.success('Message sent. We will get back to you shortly.');
-      setForm({ name: '', email: '', message: '' });
+      setForm({ name: '', email: '', phone: '', message: '' });
     } catch {
       toast.error('Failed to send. Try again.');
     } finally { setSending(false); }
@@ -875,6 +875,16 @@ const Contact = () => {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="mt-2 h-12 rounded-xl"
               data-testid="contact-email-input"
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase font-semibold tracking-wider text-slate-500">Phone number</label>
+            <Input
+              type="tel" inputMode="tel" placeholder="+91 98765 43210"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="mt-2 h-12 rounded-xl"
+              data-testid="contact-phone-input"
             />
           </div>
           <div>
