@@ -22,7 +22,9 @@ from routers import (
     contact as contact_router,
     company as company_router,
     verify as verify_router,
+    superadmin as superadmin_router,
 )
+from core.seed import seed_super_admin
 
 app = FastAPI(title="BILL4PE API")
 
@@ -38,6 +40,7 @@ api.include_router(reports_router.router)
 api.include_router(contact_router.router)
 api.include_router(company_router.router)
 api.include_router(verify_router.router)
+api.include_router(superadmin_router.router)
 
 
 @api.get("/")
@@ -54,6 +57,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def seed_platform_defaults():
+    """Ensure the configured Super Admin account exists at boot."""
+    try:
+        uid = await seed_super_admin()
+        from core.config import logger
+        logger.info(f"Super admin seeded/verified (uid={uid})")
+    except Exception as e:
+        from core.config import logger
+        logger.error(f"Super admin seed failed: {e}")
 
 
 @app.on_event("startup")
