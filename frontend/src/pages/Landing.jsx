@@ -609,9 +609,9 @@ const Hero = () => {
 
 const HowItWorks = () => {
   const steps = [
-    { icon: ScanLine, t: 'Snap or Type', d: 'Take a photo of your meal or receipt. AI detects every item and price automatically. Or type it in manually with smart suggestions.' },
+    { icon: ScanLine, t: 'Snap or Type', d: 'Take a photo of your meal or any products items intend to buy and AI detects every item and price automatically if the price tag is precise, else to be fed manually.' },
     { icon: QrCode, t: 'Scan UPI QR', d: 'Tap Pay Now. Scan any merchant QR — GPay, PhonePe, Paytm, BharatPe. We auto-capture merchant name, UPI ID and txn details.' },
-    { icon: FileText, t: 'Get the Invoice', d: '₹5 from wallet generates a professional PDF reimbursement invoice. Share it, download it, file your expense.' },
+    { icon: FileText, t: 'Get the Invoice', d: 'Generates a professional PDF reimbursement invoice. Share it, download it, file your expense.' },
   ];
   return (
     <Section id="how" className="py-24 bg-white">
@@ -646,7 +646,7 @@ const Features = () => {
     { icon: FileText, t: 'Smart Invoice', d: 'Corporate-grade PDF, downloadable & shareable.' },
     { icon: Wallet, t: 'Wallet System', d: 'Recharge once. Pay platform charges seamlessly.' },
     { icon: ShieldCheck, t: 'Reimbursement Ready', d: 'Auto geo-tag, timestamps, txn IDs preserved.' },
-    { icon: Smartphone, t: 'Install as App', d: 'PWA. Works offline. No app store needed.' },
+    { icon: Smartphone, t: 'Install as App', d: 'Available on Web, Android & iPhone. Works online and offline.' },
   ];
   return (
     <Section className="py-24 bg-[#F4F5F7]">
@@ -754,13 +754,13 @@ const VisionMission = () => (
       <Pill dark>Our values</Pill>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         {[
-          { icon: Zap, t: 'Speed first', d: 'If it takes more than 60 seconds, we did it wrong.' },
+          { icon: Zap, t: 'Speed first', d: 'Fast, accurate billing—typically completed within 60 seconds.' },
           { icon: ShieldCheck, t: 'Audit-ready', d: 'Every bill carries merchant, txn, geo and time.' },
-          { icon: Sparkles, t: 'AI-native', d: 'Vision and language models do the boring work.' },
+          { icon: Sparkles, t: 'AI-native', d: 'Automated billing powered by vision and intelligence.' },
           { icon: HeartHandshake, t: 'Made for India', d: 'UPI, rupees, Indian food, real merchant flows.' },
         ].map(({ icon: Icon, t, d }) => (
           <div key={t} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5">
-            <Icon className="w-6 h-6 text-brand" strokeWidth={1.6} />
+            <Icon className="w-6 h-6 text-[#00BAF2]" strokeWidth={1.6} />
             <div className="font-display font-bold mt-4">{t}</div>
             <div className="text-xs text-white/50 mt-1.5 leading-relaxed">{d}</div>
           </div>
@@ -775,7 +775,7 @@ const UseCases = () => {
     { t: 'Sales & Field Teams', d: 'Track every meal, ride and client gift with proof.' },
     { t: 'Consultants', d: 'Generate billable expense reports per client in minutes.' },
     { t: 'Startups', d: 'Replace your messy receipts WhatsApp group.' },
-    { t: 'Enterprises', d: 'Stream-line corporate expense policies with API access.' },
+    { t: 'Enterprises', d: 'Leakage-proof and authenticated expense management with secure API access.' },
   ];
   return (
     <Section className="py-24 bg-white">
