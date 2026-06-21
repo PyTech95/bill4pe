@@ -16,7 +16,12 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      const u = await login(form.email, form.password);
+      if (u?.is_super_admin) {
+        toast.success('Welcome, Super Admin');
+        nav('/superadmin');
+        return;
+      }
       toast.success('Welcome back!');
       nav('/app');
     } catch (err) {
