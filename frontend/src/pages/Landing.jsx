@@ -936,6 +936,7 @@ const Footer = () => (
           <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
           <li><Link to="/terms" className="hover:text-brand">Terms</Link></li>
           <li><Link to="/disclaimer" className="hover:text-brand" data-testid="footer-disclaimer-link">Disclaimer</Link></li>
+          <li><Link to="/superadmin/login" className="hover:text-brand text-white/40" data-testid="footer-superadmin-link">Super Admin</Link></li>
         </ul>
       </div>
     </div>

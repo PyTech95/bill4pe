@@ -14,6 +14,8 @@ import Login from '@/pages/auth/Login';
 import PhoneLogin from '@/pages/auth/PhoneLogin';
 import Register from '@/pages/auth/Register';
 import AcceptInvite from '@/pages/auth/AcceptInvite';
+import SuperAdminLogin from '@/pages/auth/SuperAdminLogin';
+import SuperAdminDashboard from '@/pages/admin/SuperAdminDashboard';
 import Splash from '@/pages/app/Splash';
 import Categories from '@/pages/app/Categories';
 import SubCategory from '@/pages/app/SubCategory';
@@ -37,6 +39,13 @@ const Private = ({ children }) => {
   return user ? children : <Navigate to="/login" replace />;
 };
 
+const SuperAdminGuard = ({ children }) => {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/superadmin/login" replace />;
+  if (!user.is_super_admin) return <Navigate to="/" replace />;
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -53,6 +62,8 @@ function App() {
           <Route path="/login/phone" element={<PhoneLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
+          <Route path="/superadmin/login" element={<SuperAdminLogin />} />
+          <Route path="/superadmin" element={<SuperAdminGuard><SuperAdminDashboard /></SuperAdminGuard>} />
 
           <Route path="/app" element={<Private><AppShell /></Private>}>
             <Route index element={<Splash />} />
