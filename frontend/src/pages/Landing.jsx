@@ -430,10 +430,11 @@ const ScreenTravelBill = () => (
 );
 
 const PHONE_SCREENS = [
+  // Order: 1st Auto/Car, 2nd Food, 3rd Others
+  { key: 'auto', label: 'Auto · Ride fare', el: <ScreenAutoFare /> },
   { key: 'bill', label: 'Food · Itemised bill', el: <ScreenBill /> },
   { key: 'ai', label: 'AI thali scan', el: <ScreenAIDetect /> },
   { key: 'travel', label: 'Travel · Flight bill', el: <ScreenTravelBill /> },
-  { key: 'auto', label: 'Auto · Ride fare', el: <ScreenAutoFare /> },
   { key: 'bike', label: 'Bike · Fuel slip', el: <ScreenBikeFuel /> },
   { key: 'upi', label: 'UPI QR pay', el: <ScreenUPIScan /> },
   { key: 'invoice', label: 'PDF invoice', el: <ScreenInvoice /> },

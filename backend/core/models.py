@@ -119,6 +119,7 @@ class ReportCreate(BaseModel):
 class ContactMsg(BaseModel):
     name: str
     email: EmailStr
+    phone: Optional[str] = None
     message: str
 
 
