@@ -422,6 +422,31 @@ export default function PayNow() {
     };
   }, [stopCamera]);
 
+  // When user taps a UPI app, the app moves to background. When they return
+  // (whether payment succeeded, failed, or was cancelled — including Paytm's
+  // "Risk Policy" block), the document becomes visible again. We use this
+  // signal to focus the UTR / Save-Unpaid panel and auto-scroll to it so the
+  // user is never "stuck" wondering what to do next.
+  useEffect(() => {
+    if (!paymentInitiated) return;
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const launchedAt = upiAppLaunchedAtRef.current;
+      // Require at least 1.2s away to avoid false positives (some UPI apps
+      // briefly toggle visibility while their splash loads)
+      if (!launchedAt || Date.now() - launchedAt < 1200) return;
+      setReturnedFromUpi(true);
+      // Defer scroll until paint
+      setTimeout(() => {
+        try {
+          postPayAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch { /* */ }
+      }, 120);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [paymentInitiated]);
+
   const handleStartCameraTap = () => {
     setCameraRequested(true);
     setScanError('');
@@ -542,21 +567,64 @@ export default function PayNow() {
     { id: 'other',    label: 'Other UPI',  scheme: 'upi',        path: 'pay',     tint: 'bg-navy text-white border-transparent' },
   ];
 
+  // NPCI UPI VPA format: <name>@<handle>. Examples:
+  //   merchant.123@oksbi, 9876543210@ybl, shop@paytm
+  // Apps (esp. Paytm/PhonePe) silently reject malformed VPAs with a generic
+  // "Risk policy" error, so we validate BEFORE launching the deeplink.
+  const isValidVpa = (vpa) => {
+    if (!vpa) return false;
+    const trimmed = vpa.trim();
+    // basic format: at least one char before @, at least one char after, no spaces
+    return /^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/.test(trimmed);
+  };
+
+  // RFC 3986 percent-encoding. URLSearchParams encodes ' ' as '+' which several
+  // UPI apps (notably Paytm) treat as a malformed URI and reject. Use %20 instead.
+  const encodeUpiParam = (val) =>
+    encodeURIComponent(String(val ?? '')).replace(/'/g, '%27').replace(/!/g, '%21');
+
+  // Build NPCI-spec-compliant UPI URI — P2P-COMPATIBLE (bare minimum).
+  //
+  // CRITICAL: most small merchants (kirana, food, travel) use PERSONAL VPAs
+  // like `shop@oksbi`, `9876543210@ybl` — NOT registered merchant (P2M) VPAs.
+  // If we send `mode=02` and `tr` (transaction reference), NPCI rails route
+  // this as a merchant transaction, and the bank silently REJECTS the txn
+  // AFTER the user enters the UPI PIN (because the payee isn't TSP-onboarded
+  // as a merchant). Removing `mode` and `tr` makes the URI behave as a plain
+  // P2P collect that works for BOTH personal and merchant VPAs.
+  //
+  //   pa  = payee VPA      (required)
+  //   pn  = payee name     (required, <=40 chars, ASCII-safe)
+  //   am  = amount         (decimal string like "120.00")
+  //   cu  = currency       (INR)
+  //   tn  = transaction note (short, optional)
   const buildUpiLink = (scheme = 'upi', path = 'pay') => {
-    const params = new URLSearchParams({
-      pa: merchant.upi,
-      pn: merchant.name || 'Merchant',
+    const fields = {
+      pa: merchant.upi.trim(),
+      pn: (merchant.name || 'Merchant').trim().slice(0, 40),
       am: total.toFixed(2),
       cu: 'INR',
       tn: 'BILL4PE Expense',
-    });
-    return `${scheme}://${path}?${params.toString()}`;
+    };
+    const qs = Object.entries(fields)
+      .map(([k, v]) => `${k}=${encodeUpiParam(v)}`)
+      .join('&');
+    return `${scheme}://${path}?${qs}`;
   };
 
   const launchUpiApp = (scheme = 'upi', path = 'pay') => {
-    if (!merchant.upi) { toast.error('Merchant UPI ID required'); return; }
+    if (!merchant.upi?.trim()) { toast.error('Merchant UPI ID required'); return; }
     if (!merchant.name?.trim()) { toast.error('Merchant Name required'); return; }
+    if (!isValidVpa(merchant.upi)) {
+      toast.error(`Invalid UPI ID "${merchant.upi}" — must look like name@bank (e.g. shop@oksbi)`);
+      return;
+    }
+    if (!Number.isFinite(total) || total <= 0) {
+      toast.error('Amount must be greater than ₹0');
+      return;
+    }
     const link = buildUpiLink(scheme, path);
+    upiAppLaunchedAtRef.current = Date.now();
     try {
       const a = document.createElement('a');
       a.href = link;
@@ -586,21 +654,18 @@ export default function PayNow() {
 
   const submit = async (opts = {}) => {
     const { skipped = false } = opts;
-    const isCash = merchant.method === 'Cash';
     if (!merchant.name?.trim()) { toast.error('Merchant Name required'); return; }
-    if (!isCash && !merchant.upi?.trim()) { toast.error('Merchant UPI required'); return; }
+    if (!merchant.upi?.trim()) { toast.error('Merchant UPI required'); return; }
     // UTR is optional. If user is saving without paying, we mark it pending.
-    if (!isCash && !skipped && !merchant.txnId?.trim()) {
+    if (!skipped && !merchant.txnId?.trim()) {
       toast.error('Enter UTR after paying, or tap "Payment didn\'t go through" to save anyway');
       return;
     }
     setStage('submitting');
     try {
-      const txnId = isCash
-        ? (merchant.txnId?.trim() || `CASH-${Date.now()}`)
-        : skipped
-          ? (merchant.txnId?.trim() || `UNPAID-${Date.now()}`)
-          : merchant.txnId;
+      const txnId = skipped
+        ? (merchant.txnId?.trim() || `UNPAID-${Date.now()}`)
+        : merchant.txnId;
       const payload = {
         category: draft.category,
         sub_category: draft.sub_category,
@@ -608,14 +673,14 @@ export default function PayNow() {
         notes: draft.notes || '',
         payment: {
           merchant_name: merchant.name,
-          merchant_upi: isCash ? '' : merchant.upi,
+          merchant_upi: merchant.upi,
           merchant_mobile: merchant.mobile,
           transaction_id: txnId,
           payment_status: skipped ? 'unpaid' : 'paid',
           amount: total,
           latitude: geo.lat,
           longitude: geo.lng,
-          payment_method: skipped ? 'Unpaid' : merchant.method,
+          payment_method: skipped ? 'Unpaid' : 'UPI',
           ...(draft.trip_meta ? { trip: draft.trip_meta } : {}),
           ...(draft.stay_meta ? { stay: draft.stay_meta } : {}),
         },
@@ -888,29 +953,6 @@ export default function PayNow() {
 
       {(stage === 'confirm' || stage === 'submitting') && (
         <div className="mt-5 space-y-4">
-          {/* Payment Mode Toggle */}
-          <div className="flat-card p-4">
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Payment Mode</div>
-            <div className="mt-3 grid grid-cols-2 gap-2" data-testid="payment-mode-toggle">
-              <button
-                type="button"
-                onClick={() => setMerchant({ ...merchant, method: 'UPI' })}
-                data-testid="paymode-upi-btn"
-                className={`press-down h-11 rounded-xl border text-sm font-semibold ${merchant.method !== 'Cash' ? 'bg-navy text-white border-transparent' : 'bg-white text-navy border-soft'}`}
-              >
-                UPI / QR
-              </button>
-              <button
-                type="button"
-                onClick={() => setMerchant({ ...merchant, method: 'Cash' })}
-                data-testid="paymode-cash-btn"
-                className={`press-down h-11 rounded-xl border text-sm font-semibold ${merchant.method === 'Cash' ? 'bg-navy text-white border-transparent' : 'bg-white text-navy border-soft'}`}
-              >
-                Cash
-              </button>
-            </div>
-          </div>
-
           <div className="flat-card p-5">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Merchant</div>
             <div className="mt-3 space-y-3">
@@ -920,9 +962,14 @@ export default function PayNow() {
                        className="mt-1 h-11 rounded-lg border-soft" data-testid="merchant-name-input" placeholder="e.g. Suresh Tiffin Centre" />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UPI ID {merchant.method === 'Cash' && '(optional)'}</label>
+                <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UPI ID</label>
                 <Input value={merchant.upi} onChange={(e) => setMerchant({ ...merchant, upi: e.target.value })}
-                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-upi-input" placeholder={merchant.method === 'Cash' ? 'Skip if no UPI' : 'merchant@upi'} />
+                       className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="merchant-upi-input" placeholder="merchant@upi (e.g. shop@oksbi)" />
+                {merchant.upi && !isValidVpa(merchant.upi) && (
+                  <p data-testid="upi-invalid-hint" className="mt-1 text-[11px] text-red-600 leading-snug">
+                    UPI ID format galat hai. Sahi format: <b>name@bank</b> (jaise <b>shop@oksbi</b>, <b>9876543210@ybl</b>).
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile (optional)</label>
@@ -932,7 +979,6 @@ export default function PayNow() {
             </div>
           </div>
 
-          {merchant.method !== 'Cash' && (
           <div className="flat-card p-5 space-y-3">
             <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">Pay this merchant</div>
             <p className="text-xs text-slate-500 leading-snug">
@@ -964,19 +1010,12 @@ export default function PayNow() {
                     Payment failed in your UPI app?
                   </div>
                   <div className="mt-1 text-[11px] text-amber-900/85 leading-snug">
-                    UPI risk policy / daily-limit blocks are <b>not</b> our system. Either:
-                    <br />• Try a <b>different UPI app</b> above (GPay/PhonePe/BHIM use different bank rails)
-                    <br />• Switch to <b>Cash</b> mode below and mark it paid
-                    <br />• Or tap <b>&quot;Payment didn&apos;t go through? Save expense anyway&quot;</b> to continue
+                    Common reasons &amp; fixes:
+                    <br />• <b>Invalid VPA</b> — confirm merchant&apos;s UPI ID looks like <code className="font-mono">name@bank</code>
+                    <br />• <b>UPI risk policy / daily limit</b> — try a different UPI app above (different banks, different rails)
+                    <br />• <b>Receiver not registered for merchant payments</b> — ask merchant for a P2M QR or use another VPA
+                    <br />• Or tap <b>&quot;Payment didn&apos;t go through? Save expense anyway&quot;</b> below to log the unpaid bill
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setMerchant((m) => ({ ...m, method: 'Cash' }))}
-                    data-testid="switch-to-cash-btn"
-                    className="press-down mt-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-amber-900 text-amber-50 text-[11px] font-bold"
-                  >
-                    Switch to Cash mode
-                  </button>
                 </div>
               </div>
             </div>
@@ -1000,14 +1039,21 @@ export default function PayNow() {
               )}
             </div>
           </div>
-          )}
+
+          {/* Anchor for auto-scroll after returning from UPI app */}
+          <div ref={postPayAnchorRef} />
 
           <div className="flat-card p-5">
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Confirm cash payment' : 'After paying'}</div>
-            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{merchant.method === 'Cash' ? 'Receipt # (optional)' : 'UTR / Transaction ID (optional)'}</label>
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-400 font-semibold">After paying</div>
+            {returnedFromUpi && (
+              <div data-testid="returned-from-upi-banner" className="mt-3 rounded-xl bg-lime/15 border border-lime/40 px-3.5 py-2.5 text-[12px] text-navy font-semibold leading-snug">
+                Welcome back! Apne UPI app ka <b>Transaction ID (UTR)</b> neeche enter kariye, ya agar payment nahi hua to <b>&quot;Save expense anyway&quot;</b> tap kariye.
+              </div>
+            )}
+            <label className="block mt-3 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UTR / Transaction ID (optional)</label>
             <Input value={merchant.txnId} onChange={(e) => setMerchant({ ...merchant, txnId: e.target.value })}
-                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder={merchant.method === 'Cash' ? 'e.g. receipt or memo no.' : 'Enter UTR after paying, or skip'} />
-            <p className="text-[11px] text-slate-400 mt-1">{merchant.method === 'Cash' ? 'Total cash paid: ₹' + total.toFixed(2) : 'From your UPI app receipt. Skip if payment failed.'}</p>
+                   className="mt-1 h-11 rounded-lg border-soft font-mono" data-testid="txn-id-input" placeholder="Enter UTR after paying, or skip" />
+            <p className="text-[11px] text-slate-400 mt-1">From your UPI app receipt. Skip if payment failed.</p>
             <Button
               data-testid="confirm-payment-btn"
               onClick={() => submit()}
@@ -1017,20 +1063,18 @@ export default function PayNow() {
               {stage === 'submitting' ? (
                 <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Saving…</span>
               ) : (
-                <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {merchant.method === 'Cash' ? 'Mark Cash Paid' : 'Confirm payment'}</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Confirm payment</span>
               )}
             </Button>
-            {merchant.method !== 'Cash' && (
-              <button
-                type="button"
-                data-testid="save-unpaid-btn"
-                onClick={() => submit({ skipped: true })}
-                disabled={stage === 'submitting'}
-                className="press-down w-full h-11 mt-2 rounded-xl border border-soft bg-white text-slate-600 text-[12px] font-semibold hover:border-amber-400 hover:text-amber-700 transition"
-              >
-                Payment didn&apos;t go through? Save expense anyway
-              </button>
-            )}
+            <button
+              type="button"
+              data-testid="save-unpaid-btn"
+              onClick={() => submit({ skipped: true })}
+              disabled={stage === 'submitting'}
+              className="press-down w-full h-11 mt-2 rounded-xl border border-soft bg-white text-slate-600 text-[12px] font-semibold hover:border-amber-400 hover:text-amber-700 transition"
+            >
+              Payment didn&apos;t go through? Save expense anyway
+            </button>
           </div>
         </div>
       )}
