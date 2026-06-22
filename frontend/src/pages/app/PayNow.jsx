@@ -554,15 +554,18 @@ export default function PayNow() {
     try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* */ }
   };
 
-  // UPI deep-link schemes per app. Path differs per app:
-  //  - upi/gpay (tez) / bhim / amazonpay use   <scheme>://upi/pay?...
-  //  - phonepe / paytmmp / whatsapp use        <scheme>://pay?...
+  // UPI deep-link schemes per app (verified 2026, NPCI-compliant):
+  //  - gpay / phonepe / paytmmp / whatsapp use   <scheme>://pay?...
+  //  - bhim / amazonpay use                      <scheme>://upi/pay?...
+  //  - Generic upi://pay triggers Android UPI chooser (most reliable fallback)
+  // NOTE: `tez://` is DEPRECATED in 2026 (Google merged Tez into Google Pay).
+  //       Use `gpay://` for Google Pay; older devices fall back to `upi://`.
   const UPI_APPS = [
-    { id: 'gpay',     label: 'Google Pay', scheme: 'tez',        path: 'upi/pay', tint: 'bg-white text-navy border-soft' },
+    { id: 'gpay',     label: 'Google Pay', scheme: 'gpay',       path: 'pay',     tint: 'bg-white text-navy border-soft' },
     { id: 'phonepe',  label: 'PhonePe',    scheme: 'phonepe',    path: 'pay',     tint: 'bg-[#5f259f] text-white border-transparent' },
     { id: 'paytm',    label: 'Paytm',      scheme: 'paytmmp',    path: 'pay',     tint: 'bg-[#00baf2] text-white border-transparent' },
     { id: 'bhim',     label: 'BHIM',       scheme: 'bhim',       path: 'upi/pay', tint: 'bg-[#ff7a00] text-white border-transparent' },
-    { id: 'amazon',   label: 'Amazon Pay', scheme: 'amazonpay',  path: 'upi/pay', tint: 'bg-[#232f3e] text-white border-transparent' },
+    { id: 'amazon',   label: 'Amazon Pay', scheme: 'amazonpay',  path: 'pay',     tint: 'bg-[#232f3e] text-white border-transparent' },
     { id: 'whatsapp', label: 'WhatsApp',   scheme: 'whatsapp',   path: 'pay',     tint: 'bg-[#25d366] text-white border-transparent' },
     { id: 'other',    label: 'Other UPI',  scheme: 'upi',        path: 'pay',     tint: 'bg-navy text-white border-transparent' },
   ];
