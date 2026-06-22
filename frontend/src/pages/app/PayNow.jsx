@@ -61,7 +61,7 @@ export default function PayNow() {
   const { refreshUser } = useAuth();
   const [draft, setDraft] = useState(null);
   const [stage, setStage] = useState('scan');
-  const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '', txnId: '', method: 'UPI' });
+  const [merchant, setMerchant] = useState({ name: '', upi: '', mobile: '', txnId: '' });
   const [geo, setGeo] = useState({ lat: null, lng: null });
   const [scanStatus, setScanStatus] = useState('idle'); // idle | starting | running | error | denied | inapp
   const [cameraRequested, setCameraRequested] = useState(false);
@@ -71,6 +71,11 @@ export default function PayNow() {
   const [currentDeviceId, setCurrentDeviceId] = useState(null);
   const [useFrontCamera, setUseFrontCamera] = useState(false);
   const [paymentInitiated, setPaymentInitiated] = useState(false);
+  // When the user returns to the app after tapping a UPI app, we show a focused
+  // "Did your payment go through?" panel and auto-scroll to the UTR / Save-Unpaid section.
+  const [returnedFromUpi, setReturnedFromUpi] = useState(false);
+  const upiAppLaunchedAtRef = useRef(0);
+  const postPayAnchorRef = useRef(null);
   // Live diagnostics shown to user in error state — helps debug "black screen" in production
   const [diag, setDiag] = useState({ ready: 0, vw: 0, vh: 0, trackMuted: null, trackState: '' });
 
