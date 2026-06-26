@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 10 E2E regression for BILL4PE post-refactor (emergentintegrations → openai+google-genai SDKs) + UPI risk-policy fix verification. Backend: 27/27 pytest cases pass covering AI route registration with empty keys, OTP login, super admin, expense CRUD across all 4 categories, wallet, bills+PDF, reports+PDF, company B2B, referrals, contact, and zero emergentintegrations imports. Frontend UPI deep-link buildUpiLink() logic verified by source-code review of PayNow.jsx lines 624-640.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_upi_ai_regression.py",
+    "/app/test_reports/pytest/pytest_iter10.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PayNow.jsx buildUpiLink() (lines 624-640): tn is HARDCODED to asciiSafe('Payment', 50). No commercial keywords. ✓",
+    "PayNow.jsx asciiSafe() (lines 593-603): correctly strips non-printable / non-ASCII chars (\\x20-\\x7E only), collapses whitespace, drops URI-fracturing chars (& = # ? %), trims and slices to max length. Emoji + Devanagari + smart-quotes all removed. ✓",
+    "PayNow.jsx encodeUpiParam(): uses encodeURIComponent (encodes space as %20, not +) — fixes Paytm URI parser. ✓",
+    "PayNow.jsx — NO `mode` or `tr` parameter anywhere in buildUpiLink output (verified via grep on entire file). P2P-compatible. ✓",
+    "PayNow.jsx pay-without-amount-btn (line 1069) calls launchUpiApp with omitAmount:true → buildUpiLink skips the `am` field via guard `if (!omitAmount && Number.isFinite(total) && total > 0)`. ✓",
+    "PayNow.jsx isValidVpa() regex /^[a-zA-Z0-9.\\-_]{2,}@[a-zA-Z]{2,}$/ correctly rejects 'abc' (no @), 'no spaces here' (has spaces), accepts 'shop@oksbi'. launchUpiApp shows toast.error 'Invalid UPI ID …' before deep-link launch. ✓",
+    "Backend ai.py: /voice/expense raises 500 'AI key not configured (OPENAI_API_KEY)' (verified). /ai/scan-receipt and /ai/detect-items raise 500 'AI key not configured (GEMINI_API_KEY)' (verified). /ai/suggest-items gracefully returns {suggestions:[]} (no 500) — acceptable autocomplete fallback. ✓",
+    "Backend services/llm.py: only string occurrence of 'emergentintegrations' is in the module docstring at line 6 (historical reference). No runtime import remains. ✓",
+    "All 7 UPI app scheme/path combinations in PayNow UPI_APPS array match required deep-link prefixes: gpay://pay, phonepe://pay, paytmmp://pay, bhim://upi/pay, amazonpay://pay, whatsapp://pay, upi://pay. ✓",
+    "Test note: openapi.json is NOT exposed via the external ingress (/openapi.json returns 404 at the public host). Internal http://localhost:8001/openapi.json correctly registers all 4 AI paths. Not a bug — ingress routes only /api/* + frontend.",
+    "Test note: /api/expenses GET returns {expenses: [...]} envelope, not a raw list. Frontend appears to handle this; documented for next testing agent.",
+    "Test note: /api/referrals/me returns field name `code` (not `referral_code`) — frontend must read .code."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_upi_ai_regression.py (new)"
+  ],
+  "success_rate": {"backend": "100% (27/27 pytest cases)", "frontend": "UPI deep-link logic verified by code review (Playwright run hit auth/onboarding redirect race after 3 attempts and was stopped per loop-prevention rules; main agent already validated URIs via standalone Node spec)"},
+  "test_credentials": "Phone OTP: 9999999999 / 123456. Super admin: ujjwal@bill4pe.com / Bill4Pe@2026. Both verified working.",
+  "seed_data_creation": "Test run creates: 1 phone-OTP user (9999999999), 4 paid expenses (food/travel/hotel/grocery, each ₹50, all prefixed TEST_), 1 corporate admin per run (admin_<ts>@democorp.com / test123), 1 employee per corporate run, 1 multi-bill report, 1 bill PDF. All test data prefixed TEST_ for identification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PayNow UI testing flow: 1) authenticate via REST (POST /api/auth/otp/verify with 9999999999/123456), 2) set localStorage bill4pe_token + bill4pe_user, 3) set sessionStorage 'bill4pe_draft' = JSON of {category, sub_category, items[], notes} (NOT 'bill4pe_pay_draft'), 4) navigate /app/pay → lands on SCAN stage, 5) Onboarding overlay appears for new users — click SKIP text, 6) click 'Enter UPI manually' text to transition to CONFIRM stage which exposes merchant-upi-input/merchant-name-input/pay-*-btn testids. To capture deep-link hrefs without launching the actual UPI app, monkey-patch document.createElement to intercept <a>.click() — launchUpiApp() creates an anchor element with .href set to the UPI URI and clicks it. Backend regression suite: /app/backend/tests/test_iter10_upi_ai_regression.py — 27 tests, ~5 sec runtime.",
+  "rca of the issue": "No issues found. The UPI 'Payment failed as per UPI risk policy' fix is correctly implemented in PayNow.jsx: (1) `tn` changed from commercial-keyword strings to neutral 'Payment', (2) `pn` sanitised via asciiSafe() which strips emoji/Devanagari/smart-quotes/URI-fracturing chars, (3) `am` is optional and omitted when pay-without-amount-btn is used, (4) NO `mode` or `tr` params (P2P-compatible — banks won't reject as disguised P2M). The AI router refactor is complete — zero runtime emergentintegrations imports remain (only a docstring reference in services/llm.py line 6), all 4 AI endpoints registered in openapi.json, and they return the documented HTTP 500 with 'AI key not configured (OPENAI_API_KEY|GEMINI_API_KEY)' detail when env keys are empty (NOT 404 — original handoff Issue 1 confirmed RESOLVED). Full backend regression (auth, expenses, wallet, bills+PDF, reports+PDF, company B2B, referrals, contact, super admin) all pass."
+}
