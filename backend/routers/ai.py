@@ -1,58 +1,75 @@
-"""AI endpoints: image item detection, autocomplete suggestions, receipt OCR, voice expense."""
+"""AI endpoints: image item detection, autocomplete suggestions, receipt OCR, voice expense.
+
+Uses official SDKs (google-generativeai for Gemini, openai for Whisper) via
+`services.llm` so the backend can be self-hosted on any Ubuntu VPS without
+proprietary Emergent libraries.
+"""
 import json
 import os
 import tempfile
-import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
-from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
-
-from core.config import EMERGENT_LLM_KEY, logger
+from core.config import logger
 from core.security import get_current_user
+from services.llm import (
+    gemini_text,
+    gemini_vision,
+    has_gemini,
+    has_openai,
+    openai_transcribe,
+)
 from services.prompts import (
-    category_prompt, RECEIPT_PROMPT, VOICE_PARSE_PROMPT, VALID_CATEGORIES,
+    RECEIPT_PROMPT,
+    VALID_CATEGORIES,
+    VOICE_PARSE_PROMPT,
+    category_prompt,
 )
 
 router = APIRouter(tags=["ai"])
 
 
-@router.post("/ai/detect-items")
-async def detect_items(category: str = "food", file: UploadFile = File(...), user=Depends(get_current_user)):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "AI key not configured")
-    raw = await file.read()
-    if len(raw) > 8 * 1024 * 1024:
-        raise HTTPException(400, "Image too large (max 8MB)")
+def _strip_code_fence(txt: str) -> str:
+    txt = (txt or "").strip()
+    if txt.startswith("```"):
+        txt = txt.strip("`")
+        if txt.lower().startswith("json"):
+            txt = txt[4:].strip()
+    return txt
+
+
+def _extract_json_block(txt: str, open_char: str, close_char: str) -> str:
+    s, e = txt.find(open_char), txt.rfind(close_char)
+    if s >= 0 and e > s:
+        return txt[s:e + 1]
+    return txt
+
+
+def _normalise_mime(file: UploadFile) -> tuple[str, str]:
     mime = file.content_type or "image/jpeg"
     if mime not in ("image/jpeg", "image/png", "image/webp"):
         mime = "image/jpeg"
     suffix = ".jpg" if "jpeg" in mime else (".png" if "png" in mime else ".webp")
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    tmp.write(raw)
-    tmp.flush()
-    tmp.close()
+    return mime, suffix
+
+
+@router.post("/ai/detect-items")
+async def detect_items(category: str = "food", file: UploadFile = File(...), user=Depends(get_current_user)):
+    if not has_gemini():
+        raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
+    raw = await file.read()
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (max 8MB)")
+    mime, _suffix = _normalise_mime(file)
     try:
         prompt = category_prompt(category)
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"detect-{uuid.uuid4()}",
-            system_message=prompt,
-        ).with_model("gemini", "gemini-3-flash-preview")
-        msg = UserMessage(
-            text=f"Detect all {category} items in this image. Return strict JSON array only.",
-            file_contents=[FileContentWithMimeType(file_path=tmp.name, mime_type=mime)],
+        reply = await gemini_vision(
+            system_prompt=prompt,
+            user_text=f"Detect all {category} items in this image. Return strict JSON array only.",
+            image_bytes=raw,
+            mime=mime,
         )
-        reply = await chat.send_message(msg)
-        txt = (reply or "").strip()
-        if txt.startswith("```"):
-            txt = txt.strip("`")
-            if txt.lower().startswith("json"):
-                txt = txt[4:].strip()
-        start, end = txt.find("["), txt.rfind("]")
-        if start >= 0 and end > start:
-            txt = txt[start:end + 1]
+        txt = _extract_json_block(_strip_code_fence(reply), "[", "]")
         try:
             items = json.loads(txt)
         except Exception:
@@ -71,43 +88,33 @@ async def detect_items(category: str = "food", file: UploadFile = File(...), use
                 qty, price = 1.0, 0.0
             cleaned.append({"name": name, "quantity": qty, "unit_price": round(price, 2)})
         return {"items": cleaned}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("AI detection failed")
         raise HTTPException(500, f"AI detection failed: {str(e)[:200]}")
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except Exception:
-            pass
 
 
 @router.post("/ai/suggest-items")
 async def suggest_items(payload: dict, user=Depends(get_current_user)):
     """Suggest item names for manual entry autocomplete."""
-    if not EMERGENT_LLM_KEY:
+    if not has_gemini():
         return {"suggestions": []}
     category = payload.get("category", "food")
     query = payload.get("query", "")
     if len(query) < 2:
         return {"suggestions": []}
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"suggest-{uuid.uuid4()}",
-            system_message=(
-                f"You suggest short Indian {category} item names for autocomplete. "
-                f"Return ONLY a JSON array of 5 short strings, no prose. Example: [\"Roti\",\"Rumali Roti\",\"Romali\",\"Roomali Roti\",\"Tandoori Roti\"]"
-            ),
-        ).with_model("gemini", "gemini-3-flash-preview")
-        reply = await chat.send_message(UserMessage(text=f"Suggest items starting with '{query}'"))
-        txt = (reply or "").strip()
-        if txt.startswith("```"):
-            txt = txt.strip("`")
-            if txt.lower().startswith("json"):
-                txt = txt[4:].strip()
-        s, e = txt.find("["), txt.rfind("]")
-        if s >= 0 and e > s:
-            txt = txt[s:e + 1]
+        system_msg = (
+            f"You suggest short Indian {category} item names for autocomplete. "
+            f"Return ONLY a JSON array of 5 short strings, no prose. "
+            f"Example: [\"Roti\",\"Rumali Roti\",\"Romali\",\"Roomali Roti\",\"Tandoori Roti\"]"
+        )
+        reply = await gemini_text(
+            system_prompt=system_msg,
+            user_text=f"Suggest items starting with '{query}'",
+        )
+        txt = _extract_json_block(_strip_code_fence(reply), "[", "]")
         arr = json.loads(txt)
         return {"suggestions": [str(x) for x in arr if isinstance(x, (str, int, float))][:5]}
     except Exception:
@@ -117,38 +124,20 @@ async def suggest_items(payload: dict, user=Depends(get_current_user)):
 @router.post("/ai/scan-receipt")
 async def scan_receipt(file: UploadFile = File(...), user=Depends(get_current_user)):
     """OCR a printed receipt photo into structured expense data."""
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "AI key not configured")
+    if not has_gemini():
+        raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
     raw = await file.read()
     if len(raw) > 8 * 1024 * 1024:
         raise HTTPException(400, "Image too large (max 8MB)")
-    mime = file.content_type or "image/jpeg"
-    if mime not in ("image/jpeg", "image/png", "image/webp"):
-        mime = "image/jpeg"
-    suffix = ".jpg" if "jpeg" in mime else (".png" if "png" in mime else ".webp")
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    tmp.write(raw)
-    tmp.flush()
-    tmp.close()
+    mime, _suffix = _normalise_mime(file)
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"receipt-{uuid.uuid4()}",
-            system_message=RECEIPT_PROMPT,
-        ).with_model("gemini", "gemini-3-flash-preview")
-        msg = UserMessage(
-            text="Parse this Indian printed receipt. Return strict JSON object only.",
-            file_contents=[FileContentWithMimeType(file_path=tmp.name, mime_type=mime)],
+        reply = await gemini_vision(
+            system_prompt=RECEIPT_PROMPT,
+            user_text="Parse this Indian printed receipt. Return strict JSON object only.",
+            image_bytes=raw,
+            mime=mime,
         )
-        reply = await chat.send_message(msg)
-        txt = (reply or "").strip()
-        if txt.startswith("```"):
-            txt = txt.strip("`")
-            if txt.lower().startswith("json"):
-                txt = txt[4:].strip()
-        start, end = txt.find("{"), txt.rfind("}")
-        if start >= 0 and end > start:
-            txt = txt[start:end + 1]
+        txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
         try:
             parsed = json.loads(txt)
         except Exception:
@@ -187,21 +176,20 @@ async def scan_receipt(file: UploadFile = File(...), user=Depends(get_current_us
             "total": num(parsed.get("total")),
             "category": category,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Receipt OCR failed")
         raise HTTPException(500, f"Receipt OCR failed: {str(e)[:200]}")
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except Exception:
-            pass
 
 
 @router.post("/voice/expense")
 async def voice_expense(file: UploadFile = File(...), user=Depends(get_current_user)):
     """Accept audio file → Whisper transcript → Gemini parse → structured draft expense."""
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "AI key not configured")
+    if not has_openai():
+        raise HTTPException(500, "AI key not configured (OPENAI_API_KEY)")
+    if not has_gemini():
+        raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
     raw = await file.read()
     if len(raw) > 25 * 1024 * 1024:
         raise HTTPException(400, "Audio too large (max 25MB)")
@@ -224,34 +212,19 @@ async def voice_expense(file: UploadFile = File(...), user=Depends(get_current_u
     tmp.write(raw)
     tmp.flush()
     tmp.close()
-    transcript = ""
     try:
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-        with open(tmp.name, "rb") as af:
-            stt_resp = await stt.transcribe(
-                file=af,
-                model="whisper-1",
-                response_format="json",
-                prompt="Indian expense note. Mentions amounts in rupees, food items, cab/flight, merchant names.",
-            )
-        transcript = (getattr(stt_resp, "text", "") or "").strip()
+        transcript = await openai_transcribe(
+            tmp.name,
+            prompt="Indian expense note. Mentions amounts in rupees, food items, cab/flight, merchant names.",
+        )
         if not transcript:
             raise HTTPException(422, "Could not hear anything in the audio")
 
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"voice-parse-{uuid.uuid4()}",
-            system_message=VOICE_PARSE_PROMPT,
-        ).with_model("gemini", "gemini-3-flash-preview")
-        reply = await chat.send_message(UserMessage(text=f"Transcript: {transcript}"))
-        txt = (reply or "").strip()
-        if txt.startswith("```"):
-            txt = txt.strip("`")
-            if txt.lower().startswith("json"):
-                txt = txt[4:].strip()
-        start, end = txt.find("{"), txt.rfind("}")
-        if start >= 0 and end > start:
-            txt = txt[start:end + 1]
+        reply = await gemini_text(
+            system_prompt=VOICE_PARSE_PROMPT,
+            user_text=f"Transcript: {transcript}",
+        )
+        txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
         try:
             parsed = json.loads(txt)
         except Exception:

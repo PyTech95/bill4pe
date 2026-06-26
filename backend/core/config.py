@@ -10,8 +10,15 @@ load_dotenv(ROOT_DIR / ".env")
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret")
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+
+# LLM provider keys (standard SDKs, self-host compatible)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Model names – override via env if needed
+OPENAI_WHISPER_MODEL = os.environ.get("OPENAI_WHISPER_MODEL", "whisper-1")
+GEMINI_VISION_MODEL = os.environ.get("GEMINI_VISION_MODEL", "gemini-1.5-flash")
+GEMINI_TEXT_MODEL = os.environ.get("GEMINI_TEXT_MODEL", "gemini-1.5-flash")
 
 # Business constants
 BILL_FEE_PERCENT = 0.01   # 1% of expense total
