@@ -1,0 +1,165 @@
+{
+  "project_name": "bill4pe",
+  "archetype": "THE_PERFORMANCE_PRO_HYBRID_FINTECH",
+  "theme_mode": "light_with_dark_slate_sidebar",
+  "design_vision": "Money-App Grade B2B & Freelancer Invoicing Platform tailored for India's high-velocity UPI and GST ecosystem. Blends the crisp high-precision Swiss grid with India's trusted digital payment energy (Deep Indigo/Electric Saffron & Jade green accents, zero clutter, instant QR generation, GST auto-computation, and tactical scanability).",
+  "typography": {
+    "font_families": {
+      "heading": "Outfit, system-ui, -apple-system, sans-serif",
+      "body": "Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+      "mono_numbers": "JetBrains Mono, Menlo, Monaco, Consolas, monospace"
+    },
+    "scale": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight leading-snug",
+      "h3": "text-xl sm:text-2xl font-semibold tracking-tight",
+      "h4": "text-base sm:text-lg font-medium",
+      "body": "text-sm sm:text-base leading-relaxed text-slate-600 dark:text-slate-300",
+      "label_overline": "text-[11px] font-semibold tracking-[0.18em] uppercase text-slate-500",
+      "currency_large": "font-mono text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight"
+    },
+    "rules": [
+      "Never use Inter or generic Arial for page headers or KPI summaries.",
+      "Use Mono font for Indian Rupee amounts, invoice numbers (e.g. INV-2026-0042), GSTIN, and UPI IDs for absolute numeric precision.",
+      "All major section headers must have tight tracking (tracking-tight)."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "primary_brand": "#5E35B1",
+      "primary_hover": "#512DA8",
+      "primary_light_bg": "#EDE7F6",
+      "dark_sidebar": "#0F172A",
+      "dark_sidebar_surface": "#1E293B",
+      "canvas_background": "#F8FAFC",
+      "card_surface": "#FFFFFF",
+      "border_subtle": "#E2E8F0",
+      "border_prominent": "#CBD5E1",
+      "paid_success": "#059669",
+      "paid_success_light": "#ECFDF5",
+      "pending_amber": "#D97706",
+      "pending_amber_light": "#FFFBEB",
+      "overdue_crimson": "#E11D48",
+      "overdue_crimson_light": "#FFF1F2",
+      "upi_accent": "#0284C7",
+      "upi_accent_light": "#F0F9FF"
+    },
+    "guidelines": [
+      "Never use pure black #000000. Use deep slate #0F172A or #1E293B.",
+      "Badges for invoice status must always use high-contrast combinations: Paid = Emerald text on Emerald-50 background with Emerald-200 border; Pending = Amber-700 on Amber-50 with Amber-200 border; Overdue = Rose-700 on Rose-50 with Rose-200 border.",
+      "Buttons with primary action (Create Invoice, Pay via UPI, Download PDF) must use vibrant purple/indigo with clear white text and visible focus ring."
+    ]
+  },
+  "layouts": {
+    "dashboard_grid": "MODE B - High Density Grid: 4-column KPI cards row (Total Revenue, Paid, Pending, Overdue) followed by an asymmetric 8-col / 4-col breakdown for Live Invoices & Quick UPI Actions / Top Customers.",
+    "invoice_builder_layout": "Split-view workflow: Left/Main 8-col editable invoice canvas (Client selector, Invoice dates, HSN/SAC table, GST toggle, dynamic tax slab 0%, 5%, 12%, 18%, 28%) and Right 4-col Live Preview sticky pane with auto-generated Bharat UPI QR code & summary totals.",
+    "spacing_rules": {
+      "page_padding": "p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto",
+      "card_padding": "p-5 sm:p-6",
+      "gap_between_widgets": "gap-4 sm:gap-6"
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Crisp 1px borders (border-slate-200/80), gentle layered shadows (shadow-[0_1px_3px_rgba(15,23,42,0.06),0_10px_20px_rgba(15,23,42,0.03)]), rounded-xl card geometry.",
+    "upi_qr_component": "Clean white card with subtle 1px border, central high-contrast SVG/Canvas QR code with instant 'Copy UPI Link' and 'Open UPI App' button triggers.",
+    "gst_breakdown_pill": "Explicit CGST (9%) + SGST (9%) or IGST (18%) computed tag next to the total to give genuine Indian tax compliance trust.",
+    "empty_states": "Tactile, illustrated empty states with quick-action shortcut buttons (e.g. 'Create First Invoice' or 'Import Sample Client')."
+  },
+  "image_urls": {
+    "app_hero_cover": {
+      "url": "https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxvZmZpY2UlMjBwcm9mZXNzaW9uYWwlMjB3b3JraW5nJTIwbGFwdG9wfGVufDB8fHx8MTc4NzYwOTkyMnww&ixlib=rb-4.1.0&q=85",
+      "category": "auth_and_landing_banner",
+      "description": "Professional modern laptop workplace for authentication side-panel and marketing hero illustration"
+    },
+    "business_owner_avatar": {
+      "url": "https://images.pexels.com/photos/38178433/pexels-photo-38178433.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "customer_and_profile_avatar",
+      "description": "Indian small business owner / artisan profile avatar"
+    }
+  },
+  "key_features_and_screens": {
+    "1_auth": {
+      "description": "Login / Signup with Role selection (Admin/Business Owner vs Team Member/Billing Staff), remember-me toggle, fast mock switch for testing.",
+      "test_ids": {
+        "login_email": "auth-login-email-input",
+        "login_password": "auth-login-password-input",
+        "login_submit": "auth-login-submit-button",
+        "signup_role_select": "auth-signup-role-select",
+        "demo_login_button": "auth-demo-login-button"
+      }
+    },
+    "2_dashboard": {
+      "description": "High-density overview with 4 financial KPI cards (Total Invoiced, Total Collected, Pending Dues, Overdue), Monthly Revenue Bar/Area Chart, Recent Invoices quick table, Quick Action triggers ('New Invoice', 'Add Customer', 'Generate Fast UPI Link').",
+      "test_ids": {
+        "kpi_total_revenue": "dashboard-kpi-total-revenue",
+        "kpi_paid_amount": "dashboard-kpi-paid-amount",
+        "kpi_pending_amount": "dashboard-kpi-pending-amount",
+        "kpi_overdue_amount": "dashboard-kpi-overdue-amount",
+        "btn_create_invoice": "dashboard-create-invoice-button",
+        "table_recent_invoices": "dashboard-recent-invoices-table"
+      }
+    },
+    "3_invoice_management": {
+      "description": "Full invoice list with search by client name / invoice number, status filter tabs (All, Paid, Pending, Overdue, Draft), date ranges, bulk actions, and sorting.",
+      "test_ids": {
+        "search_input": "invoices-search-input",
+        "filter_status_tabs": "invoices-status-tabs",
+        "invoice_row_prefix": "invoice-row-item-",
+        "btn_export_csv": "invoices-export-csv-button"
+      }
+    },
+    "4_invoice_builder": {
+      "description": "Stateful dynamic invoice creator. Includes auto-incremented invoice number, Client selector or quick-add modal, Issue & Due dates, Multi-item table with Description, HSN/SAC code, Qty, Unit Price, GST Rate slab (0%, 5%, 12%, 18%, 28%), Auto-calculated CGST/SGST/IGST breakdown, Discount %, Notes & Bank/UPI details footer.",
+      "test_ids": {
+        "client_select": "invoice-builder-client-select",
+        "invoice_number_input": "invoice-builder-number-input",
+        "add_item_button": "invoice-builder-add-item-button",
+        "item_row_prefix": "invoice-builder-item-row-",
+        "item_desc_input": "invoice-builder-item-desc-",
+        "item_qty_input": "invoice-builder-item-qty-",
+        "item_rate_input": "invoice-builder-item-rate-",
+        "item_gst_select": "invoice-builder-item-gst-",
+        "grand_total_display": "invoice-builder-grand-total",
+        "save_invoice_button": "invoice-builder-save-button",
+        "save_and_send_button": "invoice-builder-save-and-send-button"
+      }
+    },
+    "5_invoice_detail_and_upi_payment": {
+      "description": "Clean, print-ready digital invoice sheet with dynamic UPI QR Code (upi://pay?pa=...&pn=...&am=...&cu=INR), 'Copy UPI Payment Link', 'Mark as Paid' modal with payment mode (UPI, NEFT/IMPS, Cash, Cheque) & transaction reference, PDF download & WhatsApp share button.",
+      "test_ids": {
+        "invoice_detail_status_badge": "invoice-detail-status-badge",
+        "upi_qr_code_container": "invoice-detail-upi-qr",
+        "btn_copy_upi_link": "invoice-detail-copy-upi-btn",
+        "btn_record_payment": "invoice-detail-record-payment-btn",
+        "btn_download_pdf": "invoice-detail-download-pdf-btn",
+        "btn_share_whatsapp": "invoice-detail-share-whatsapp-btn"
+      }
+    },
+    "6_customer_management": {
+      "description": "Customer directory with Business name, Contact Person, Phone, Email, Billing Address, GSTIN, Total Invoices count, and Total Outstanding balance.",
+      "test_ids": {
+        "customer_search": "customers-search-input",
+        "btn_add_customer": "customers-add-customer-btn",
+        "customer_card_prefix": "customer-card-item-",
+        "customer_modal_gstin": "customer-modal-gstin-input"
+      }
+    },
+    "7_business_settings": {
+      "description": "Business Profile setup: Business Name, Trade Name, GSTIN, Business Type, Primary UPI ID (e.g. business@okaxis / business@ybl), Bank Details (A/C number, IFSC, Branch), Default Invoice Prefix & Terms.",
+      "test_ids": {
+        "settings_business_name": "settings-business-name-input",
+        "settings_upi_id": "settings-upi-id-input",
+        "settings_gstin": "settings-gstin-input",
+        "settings_save_btn": "settings-save-button"
+      }
+    }
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": {
+    "data_testid_policy": "All interactive buttons, input elements, dropdown triggers, status indicators, and modal triggers MUST contain explicit kebab-case `data-testid` attributes as specified in the test_ids map.",
+    "currency_formatting": "All amounts must use the Indian Currency Numbering standard (e.g., ₹1,25,000.00 instead of ₹125,000.00) using `new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val)`.",
+    "upi_link_generation": "Generate dynamic standard UPI payment intent URIs: `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(businessName)}&am=${amount}&cu=INR&tn=Invoice%20${encodeURIComponent(invoiceNumber)}` and render high quality QR code using `qrcode.react` or an SVG QR component.",
+    "gst_compliance": "Support Indian GST calculation with intra-state (CGST + SGST) vs inter-state (IGST) automatic computation toggle based on customer state vs business state.",
+    "toasts_and_feedback": "Use `sonner` for instant user feedback upon invoice creation, payment recording, link copy, and settings updates.",
+    "responsive_collapsible_nav": "Desktop persistent dark slate sidebar with quick business profile summary and clean active indicators; Mobile bottom sheet or slide-over drawer."
+  }
+}

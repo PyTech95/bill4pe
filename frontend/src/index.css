@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 210 40% 98%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        --primary: 262 52% 45%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 262 45% 96%;
+        --secondary-foreground: 262 52% 35%;
+        --muted: 214 32% 95%;
+        --muted-foreground: 215 16% 47%;
+        --accent: 262 60% 95%;
+        --accent-foreground: 262 52% 40%;
+        --destructive: 347 77% 50%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 214 32% 91%;
+        --input: 214 32% 84%;
+        --ring: 262 52% 45%;
+        --chart-1: 262 52% 45%;
+        --chart-2: 160 84% 32%;
+        --chart-3: 32 95% 44%;
+        --chart-4: 347 77% 50%;
+        --chart-5: 199 89% 42%;
+        --radius: 0.75rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground font-sans antialiased;
+    }
+    h1, h2, h3, h4 {
+        @apply font-heading tracking-tight;
+    }
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+        border-left-width: inherit;
+        border-right-width: inherit;
+        border-top-width: inherit;
+        border-bottom-width: inherit;
+        border-left-style: inherit;
+        border-right-style: inherit;
+        border-top-style: inherit;
+        border-bottom-style: inherit;
+        border-left-color: inherit;
+        border-right-color: inherit;
+        border-top-color: inherit;
+        border-bottom-color: inherit;
+    }
+}
+
+.card-surface {
+    @apply bg-white border border-slate-200/80 rounded-xl;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 10px 20px rgba(15, 23, 42, 0.03);
+}
+
+.field-input {
+    @apply w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5E35B1]/40 focus:border-[#5E35B1] transition-colors;
+}
+
+.field-label {
+    @apply block text-[11px] font-semibold tracking-[0.18em] uppercase text-slate-500 mb-1.5;
+}
+
+@media print {
+    .print-hidden {
+        display: none !important;
+    }
+    body {
+        background: #fff !important;
+    }
+    .print-sheet {
+        box-shadow: none !important;
+        border: none !important;
+    }
+}
