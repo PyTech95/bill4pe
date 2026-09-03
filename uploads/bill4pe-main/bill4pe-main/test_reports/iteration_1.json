@@ -1,0 +1,75 @@
+{
+  "summary": "Backend-only staging hardening verification for bill4pe (46 pytest cases, 41 passed = 89%). VERIFIED PASS: /api/health + /api/health/providers (razorpay_configured=false, webhook_secret_set=false, db_name=bill4pe_staging, emergent LLM key present); super admin login ujjwal@bill4pe.com -> valid JWT + /auth/me; new user register -> login -> duplicate email 400 -> invalid email 422; demo OTP flow (123456 accepted, 000000 -> 401); expense/invoice create -> GET back with correct total math -> /bills/fee-info -> /bills/{id}/generate with correct fee + wallet debit + persistence + idempotency + PDF download (%PDF) + cross-user 404 isolation; rate limiting fires 429 with Retry-After on /auth/login (after 10) and /auth/register (after 5), /api/health not limited; payments degrade gracefully with NO keys (create-order / merchant/create-order / legacy order all return 400 'Razorpay not configured', never 500, no order created); fake checkout signature never credits the wallet (HMAC verified server-side, verify -> 404/verification_failed, balance unchanged); all 3 webhook endpoints reject unsigned AND invalid-signature requests (503 not-configured / 400 invalid-signature, never 200); manual_upi_double_scan flow works without any gateway keys and the scanned payee UPI snapshot cannot be overwritten by a mismatching second scan; all payment/expense routes reject unauthenticated + malformed JWT (401/403); no MongoDB _id leaked in any response. FAILURES are 5 real product findings: 4 missing server-side amount/quantity constraints and 1 free wallet self-credit endpoint.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/wallet/recharge",
+        "issue": "MOCK recharge grants real wallet balance with no payment proof. Any authenticated user can POST {\"amount\":10000} repeatedly and mint unlimited balance (verified: 50.0 -> 1050.0). The wallet is what pays the bill-generation convenience fee, so this bypasses all fee collection. No real money moves, but on a 'hardened' staging build a mock money-minting endpoint must be gated (e.g. only enabled when a MOCK_PAYMENTS/ALLOW_MOCK_RECHARGE env flag is explicitly on, or require a verified Razorpay order like /bills/{id}/generate does).",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/expenses",
+        "issue": "No server-side numeric constraints on money fields. All of these return 200 and persist: items[].unit_price = -500 (total -500.0), unit_price = 0, items[].quantity = -5, and items = [] (empty list -> total 0.0). core.models.ItemIn.unit_price/quantity and PaymentInfo.amount have no gt/ge bounds, and List[ItemIn] has no min_length. A negative-total invoice can then be turned into a real PDF bill via /bills/{id}/generate (verified: total -100000.0 -> bill B4P-... generated). Fix with Pydantic Field(gt=0) on unit_price/quantity/amount and min_length=1 on items.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/bills/{eid}/generate",
+        "issue": "Fee is floored at Rs 1.00 for a negative/zero total (fee=1.0 on a -100000 total). It does not credit the wallet, so no money exploit, but the fee math is meaningless for out-of-range totals. Fixing the input validation above removes this path."
+      },
+      {
+        "endpoint": "OPTIONS /api/* (public URL)",
+        "issue": "Access-Control-Allow-Origin comes back as '*' for an arbitrary origin (https://evil.example.com -> 204, ACAO: *) on the public preview URL. The APP itself is correctly locked (direct hit on 127.0.0.1:8001 returns 400 'Disallowed CORS origin'), so the permissive header is injected by the preview ingress, not by FastAPI. Informational/infra only, but worth noting because the app-level CORS lock is not observable end-to-end from a browser."
+      },
+      {
+        "endpoint": "GET /api/manual-pay/config, GET /api/payments/config",
+        "issue": "platform_fee_percent is returned as a string ('1.0') while /api/bills/fee-info returns a number (1.0). Intentional decimal-safe design per payment_service.get_fee_percent, but the inconsistent type across endpoints is a client-side footgun."
+      },
+      {
+        "endpoint": "POST /api/manual-pay/{tid}/second-scan",
+        "issue": "A mismatching payee UPI returns HTTP 200 with {match: false} instead of a 4xx. Snapshot is NOT overwritten and state does not advance (safe), but a naive client that only checks status codes would treat the mismatch as success."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter26_staging_hardening.py",
+    "/app/backend/tests/probe_iter26.py",
+    "/app/backend/tests/probe_iter26_negative.py",
+    "/app/backend/tests/cleanup_test_data.py",
+    "/app/test_reports/pytest/iter26.xml"
+  ],
+  "action_items": [
+    "Gate POST /api/wallet/recharge behind an explicit mock/dev env flag or require a verified Razorpay order — it currently mints wallet balance for any logged-in user (CRITICAL).",
+    "Add server-side bounds in core/models.py: ItemIn.unit_price = Field(gt=0), ItemIn.quantity = Field(gt=0), PaymentInfo.amount = Field(gt=0), ExpenseCreate.items = Field(min_length=1). Negative/zero/empty invoices are currently accepted and can be turned into PDF bills.",
+    "Return a consistent numeric type for platform_fee_percent across /payments/config, /manual-pay/config and /bills/fee-info.",
+    "Consider a 4xx (or an explicit error contract) for a mismatching /manual-pay/{tid}/second-scan instead of 200 + match:false.",
+    "Note in deployment docs that the preview ingress overrides ACAO with '*'; the app-level CORS_ORIGINS lock is correct but not visible externally."
+  ],
+  "critical_code_review_comments": [
+    "core/models.py: every money field (ItemIn.unit_price/quantity, PaymentInfo.amount, ExpenseCreate.items length) is unconstrained — validation is UI-only today.",
+    "routers/wallet.py: docstring literally says 'recharge (mocked)' and credits db.users.wallet_balance directly with zero payment proof; this must not ship in a hardened build.",
+    "routers/wallet.py:30 computes new_bal from the possibly stale `user` dict from the JWT dependency instead of re-reading the user doc — concurrent recharges can clobber each other (lost update). Use $inc.",
+    "core/ratelimit.py trusts the first value of X-Forwarded-For with no proxy allow-list, so a client can trivially rotate the header to reset its own rate-limit bucket (this is exactly how the test suite isolates buckets). Behind the k8s ingress use the right-most trusted hop.",
+    "routers/bills.py builds a module-level razorpay.Client at import time from os.environ — fine here (None when unset), but it means key rotation needs a process restart.",
+    "GOOD: webhook handlers verify HMAC over the RAW body, dedupe on X-Razorpay-Event-Id, and return 503 when the secret is unset; reconcile_payment verifies the checkout signature and returns verified:false rather than crediting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter26_staging_hardening.py",
+    "/app/backend/tests/probe_iter26.py",
+    "/app/backend/tests/probe_iter26_negative.py",
+    "/app/backend/tests/cleanup_test_data.py"
+  ],
+  "success_rate": { "backend": "89% (41/46)", "frontend": "not tested (backend-only request)" },
+  "seed_data_creation": "Created ~32 throwaway TEST_*@example.com individual accounts plus their expenses/bills/wallet txns during the run, then removed all of them with /app/backend/tests/cleanup_test_data.py (32 users, 25 expenses, 41 wallet txns, 2 manual transactions deleted). Seeded super admin ujjwal@bill4pe.com was left untouched.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Super admin ujjwal@bill4pe.com / Bill4Pe@2026 (from /app/memory/test_credentials.md) — login verified working. Regular users are created on the fly via /api/auth/register (welcome bonus 50.0 confirmed). Demo OTP 123456 confirmed working.",
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_iter26_staging_hardening.py -v (pytest.ini already forces -n 2 --dist loadscope; do not edit it). IMPORTANT: RateLimitMiddleware buckets on X-Forwarded-For (10/60 login, 5/60 register), so every test class in that file sends a unique synthetic X-Forwarded-For — keep doing that or the suite will 429 itself. GET /api/expenses returns {\"expenses\": [...]} not a bare list. Fee percents are strings on /payments/config and /manual-pay/config. The manual flow is effectively SINGLE-scan: first-scan lands directly in state awaiting_merchant_payment with first_qr_verified=true. After fixes, the 5 expected-to-flip tests are TestServerSideValidation::{test_empty_items_rejected,test_negative_amount_rejected,test_zero_amount_rejected,test_negative_quantity_rejected} and TestPaymentSafetyUnconfigured::test_wallet_recharge_must_not_self_credit_without_payment. Not yet covered: superadmin router, corporate/employee flows, expenses CSV export, AI (/api/ai) endpoints, reports, referrals, favourites, admin_payments, verify router. Run tests/cleanup_test_data.py afterwards.",
+  "rca_of_the_issue": "1) Validation: ExpenseCreate -> ItemIn/PaymentInfo in core/models.py declare plain float fields with no Field(gt=0) and items: List[ItemIn] with no min_length, so FastAPI/Pydantic accepts -500, 0 and []. routers/expenses.py:25 then computes total = sum(qty * unit_price) without any sanity check and persists it; /bills/{id}/generate happily issues a bill for that total. Repro: POST /api/expenses with items=[{name,quantity:1,unit_price:-500}] -> 200. 2) Wallet: routers/wallet.py recharge() is an unguarded mock that does users.update_one($set wallet_balance = user.wallet_balance + amount) with no payment verification and no env gate, so any JWT holder mints balance up to 10k per call, unbounded calls. Mitigation: Field(gt=0)/min_length=1 in models, and gate or remove the mock recharge (or route it through payment_service.reconcile_payment like the bill-fee path)."
+}
