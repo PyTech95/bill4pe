@@ -49,6 +49,22 @@ async def ensure_indexes() -> None:
     await db.wallet_ledger.create_index(
         [("transaction_id", 1), ("type", 1)], unique=True
     )
+    await db.receipt_verifications.create_index("id", unique=True)
+    # Uniqueness is enforced only for VERIFIED receipts — a rejected/misread
+    # OCR attempt must never permanently lock out a legitimate payment.
+    for legacy in ("extracted_utr_1", "extracted_transaction_id_1"):
+        try:
+            await db.receipt_verifications.drop_index(legacy)
+        except Exception:
+            pass
+    await db.receipt_verifications.create_index(
+        [("extracted_utr", 1)], unique=True, name="uniq_verified_utr",
+        partialFilterExpression={"verification_status": "verified", "extracted_utr": {"$type": "string"}},
+    )
+    await db.receipt_verifications.create_index(
+        [("extracted_transaction_id", 1)], unique=True, name="uniq_verified_txnid",
+        partialFilterExpression={"verification_status": "verified", "extracted_transaction_id": {"$type": "string"}},
+    )
     logger.info("[manual_flow] indexes ensured")
 
 
@@ -93,6 +109,7 @@ def _public(txn: dict) -> dict:
         "bill_id": txn.get("bill_id"),
         "expense_id": txn.get("expense_id"),
         "bill_status": txn.get("bill_status"),
+        "verification": _public_verification(txn.get("verification")),
         "created_at": txn.get("created_at"),
     }
 
@@ -102,6 +119,21 @@ def _mask_utr(utr):
         return None
     utr = str(utr)
     return ("X" * max(0, len(utr) - 4)) + utr[-4:] if len(utr) > 4 else utr
+
+
+_VERIFICATION_PUBLIC_KEYS = (
+    "payment_status", "extracted_amount", "currency", "extracted_utr",
+    "extracted_transaction_id", "transaction_date", "transaction_time",
+    "payee_name", "payee_upi", "payer_name", "payer_upi", "bank_name",
+    "payment_provider", "amount_matched", "receiver_matched", "duplicate_check",
+    "verification_status", "failure_reasons", "verified_at", "created_at",
+)
+
+
+def _public_verification(v):
+    if not v:
+        return None
+    return {k: v.get(k) for k in _VERIFICATION_PUBLIC_KEYS}
 
 
 # ---------------- 1) FIRST QR SCAN → freeze merchant + amount ----------------
@@ -232,52 +264,42 @@ async def confirm_payment(user, tid, completed: bool):
     return _public(updated)
 
 
-# ---------------- 4) Submit proof (UTR / last4 / screenshot) ----------------
-async def submit_proof(user, tid, utr_full=None, utr_last4=None, proof_file=None):
+# ---------------- 4) Submit proof (receipt screenshot, server-side OCR) ----------------
+async def submit_proof(user, tid, proof_file=None, image_bytes=None, mime=None):
     txn = await _owned(user, tid)
     # Freeze the proof once the fee is paid / receipt is generated (spec §40).
     if txn.get("fee_status") == "paid" or txn.get("bill_status") == "generated":
         raise ValueError("Proof is locked — the receipt has already been generated")
     if txn.get("merchant_payment_status") not in ("user_confirmed", "proof_submitted", "partial_reference"):
         raise ValueError("Confirm the merchant payment before submitting proof")
+    if not proof_file or not image_bytes:
+        raise ValueError("Upload a payment receipt screenshot")
 
-    utr_full = (utr_full or "").strip() or None
-    utr_last4 = (utr_last4 or "").strip() or None
-    if utr_full:
-        digits = "".join(c for c in utr_full if c.isdigit())
-        if len(digits) != 12:
-            raise ValueError("UTR number must be exactly 12 digits")
-        utr_full = digits
-        utr_last4 = digits[-4:]
-        proof_status = "proof_submitted"
-        merchant_payment_status = "proof_submitted"
-    elif utr_last4:
-        proof_status = "partial_reference"
-        merchant_payment_status = "user_confirmed"
-    elif proof_file:
-        proof_status = "proof_submitted"
-        merchant_payment_status = "proof_submitted"
-    else:
-        raise ValueError("Provide a UTR, last 4 digits, or a screenshot")
-
+    from services import receipt_verify
+    rec = await receipt_verify.verify_receipt(
+        user=user, txn=txn, image_bytes=image_bytes, mime=mime, proof_file=proof_file,
+    )
+    verified = rec["verification_status"] == "verified"
+    utr = rec.get("extracted_utr")
     patch = {
-        "utr_full": utr_full,
-        "utr_last4": utr_last4,
-        "proof_status": proof_status,
-        "merchant_payment_status": merchant_payment_status,
-        # last-4 / screenshot is NOT authoritative bank verification (spec §14/§34)
-        "merchant_verification_status": "unverified",
-        "state": S_PROOF_SUBMITTED,
+        # UTR/reference is ALWAYS the OCR-extracted value — never client input.
+        "utr_full": utr,
+        "utr_last4": (utr[-4:] if utr else None),
+        "proof_file": proof_file,
+        "proof_status": "proof_submitted",
         "proof_uploaded_at": now_iso(),
-        "fee_status": "due",
+        "merchant_payment_status": "proof_submitted",
+        "merchant_verification_status": rec["verification_status"],
+        "state": S_PROOF_SUBMITTED,
+        "verification": rec,
         "updated_at": now_iso(),
     }
-    if proof_file:
-        patch["proof_file"] = proof_file
+    if verified:
+        patch["fee_status"] = "due"
     updated = await db.manual_transactions.find_one_and_update(
         {"id": tid, "user_id": user["id"]}, {"$set": patch}, return_document=_AFTER,
     )
-    return _public(updated)
+    return {**_public(updated), "verification": _public_verification(rec)}
 
 
 # ---------------- 5) Atomic, idempotent wallet fee debit ----------------
@@ -341,6 +363,8 @@ async def generate_receipt(user, tid):
         return {"generated": True, **_public(txn)}
     if txn.get("proof_status") not in ("proof_submitted", "partial_reference"):
         raise ValueError("Submit payment proof before generating the receipt")
+    if txn.get("merchant_verification_status") not in ("verified", "admin_reviewed"):
+        raise ValueError("Payment is not verified yet — upload a clear receipt that matches the bill amount and payee")
 
     if txn.get("fee_status") != "paid":
         res = await _debit_wallet_fee(txn)
@@ -399,7 +423,7 @@ async def _make_receipt(txn, user) -> dict:
         "document_title": "BILL4PE DIGITAL EXPENSE RECEIPT",
         "merchant_name": txn.get("payee_name_snapshot"),
         "merchant_upi": txn.get("payee_upi_snapshot"),
-        "merchant_payment_status_label": "Payment Confirmed by User",
+        "merchant_payment_status_label": "Payment Verified via Receipt" if txn.get("merchant_verification_status") in ("verified", "admin_reviewed") else "Payment Confirmed by User",
         "customer_name": user.get("name"),
         "customer_email": user.get("email"),
         "items": [{"name": i.get("name"), "quantity": float(i.get("quantity", 1) or 1),
@@ -429,7 +453,7 @@ async def _make_receipt(txn, user) -> dict:
             "transaction_id": tid,
             "amount": total,
             "payment_method": "UPI (direct to merchant)",
-            "payment_status": "user_confirmed",
+            "payment_status": "verified" if txn.get("merchant_verification_status") in ("verified", "admin_reviewed") else "user_confirmed",
         },
         "total": total,
         "notes": draft.get("notes"),

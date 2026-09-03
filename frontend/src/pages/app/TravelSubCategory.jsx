@@ -282,7 +282,7 @@ export default function TravelSubCategory() {
               data-testid="trip-amount-input"
             />
             <div className="mt-1 text-[10px] text-slate-400">
-              Enter the amount you'll pay via UPI / QR
+              Enter the amount you'll pay via UPI
             </div>
           </div>
         </div>

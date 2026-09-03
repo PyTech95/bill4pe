@@ -68,10 +68,11 @@ export default function Terms() {
 
       <H2>8. UPI payments</H2>
       <P>
-        BILL4PE is NOT a payment system or PSP. We help you scan a merchant QR and deep-link
-        into your installed UPI app (GPay, PhonePe, Paytm, BharatPe, BHIM, etc.). The actual
-        money transfer happens entirely within your UPI app and the NPCI rails. We only
-        capture the transaction details you confirm after the payment completes.
+        BILL4PE is NOT a payment system or PSP. You pay the merchant directly in your
+        installed UPI app (GPay, PhonePe, Paytm, BharatPe, BHIM, etc.) and upload the
+        payment receipt here for automatic verification. The actual money transfer
+        happens entirely within your UPI app and the NPCI rails. We only
+        capture the transaction details verified from your receipt after the payment completes.
       </P>
 
       <H2>9. Availability</H2>

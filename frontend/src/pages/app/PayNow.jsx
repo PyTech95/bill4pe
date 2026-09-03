@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import jsQR from 'jsqr';
-import { Camera, Copy, ShieldCheck, AlertTriangle, Upload, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Copy, ShieldCheck, AlertTriangle, Loader2, CheckCircle2, XCircle, ArrowLeft, ReceiptText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -10,123 +9,71 @@ import { openRazorpay } from '@/lib/razorpay';
 import { useAuth } from '@/lib/auth';
 
 const TXN_KEY = 'bill4pe_manual_txn';
+const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
+const UPI_RE = /^[\w.-]{2,}@[\w.-]{2,}$/;
 
-// Strict UPI QR parser — only accept valid upi: payment QRs (spec §19/§20).
-function parseUpi(raw) {
-  try {
-    if (!/^upi:\/\//i.test(raw || '')) return null;
-    const q = raw.split('?')[1] || '';
-    const p = Object.fromEntries(new URLSearchParams(q));
-    const upi = (p.pa || '').trim();
-    if (!upi || !/^[\w.-]{2,}@[\w.-]{2,}$/.test(upi)) return null;
-    return { upi, name: decodeURIComponent(p.pn || '').trim(), amt: p.am || '' };
-  } catch { return null; }
+function CheckRow({ label, value, ok, mono }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 text-sm">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className={`flex items-center gap-1.5 font-medium text-right break-all ${mono ? 'font-mono' : ''}`}>
+        {ok === true && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
+        {ok === false && <XCircle className="h-4 w-4 text-red-600 shrink-0" />}
+        <span className={ok === false ? 'text-red-700' : ''}>{value}</span>
+      </span>
+    </div>
+  );
 }
 
-const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
-
-// ---- Reusable QR scanner (camera + image upload + manual entry) ----
-function QrScanner({ title, hint, onResult, onCancel }) {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const rafRef = useRef(null);
-  const decodedRef = useRef(false);
-  const [status, setStatus] = useState('starting');
-  const [err, setErr] = useState('');
-  const [manualUpi, setManualUpi] = useState('');
-  const [manualName, setManualName] = useState('');
-
-  const stop = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const v = videoRef.current;
-    if (v && v.srcObject) { v.srcObject.getTracks().forEach((t) => t.stop()); v.srcObject = null; }
-  }, []);
-
-  const handle = useCallback((data) => {
-    if (decodedRef.current) return;
-    const parsed = parseUpi(data);
-    if (!parsed) { setErr('Not a valid UPI payment QR. Scan a UPI QR or enter the UPI ID below.'); return; }
-    decodedRef.current = true;
-    stop();
-    onResult(parsed);
-  }, [onResult, stop]);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-        if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
-        const v = videoRef.current; v.srcObject = stream; await v.play(); setStatus('running');
-        const tick = () => {
-          if (!active || decodedRef.current) return;
-          const v2 = videoRef.current, c = canvasRef.current;
-          if (v2 && c && v2.videoWidth) {
-            const w = v2.videoWidth, h = v2.videoHeight; c.width = w; c.height = h;
-            const ctx = c.getContext('2d'); ctx.drawImage(v2, 0, 0, w, h);
-            const img = ctx.getImageData(0, 0, w, h);
-            const r = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
-            if (r?.data) handle(r.data);
-          }
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
-      } catch (e) {
-        setStatus('error');
-        setErr(e?.name === 'NotAllowedError' ? 'Camera permission denied. Enter the UPI ID below.' : 'Could not open camera. Enter the UPI ID below.');
-      }
-    })();
-    return () => { active = false; stop(); };
-  }, [handle, stop]);
-
-  const onFile = async (e) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    try {
-      const img = new Image(); const url = URL.createObjectURL(file);
-      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-      const c = canvasRef.current; c.width = img.width; c.height = img.height;
-      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
-      const d = ctx.getImageData(0, 0, img.width, img.height);
-      const r = jsQR(d.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-      URL.revokeObjectURL(url);
-      if (r?.data) handle(r.data); else setErr('No UPI QR found in that image.');
-    } catch { setErr('Could not read that image.'); }
-  };
-
-  const submitManual = () => {
-    const parsed = parseUpi(`upi://pay?pa=${encodeURIComponent(manualUpi.trim())}&pn=${encodeURIComponent(manualName.trim())}`);
-    if (!parsed) { toast.error('Enter a valid UPI ID like name@bank'); return; }
-    decodedRef.current = true; stop(); onResult(parsed);
-  };
-
+// Read-only verification result — every value comes from server-side OCR of the
+// uploaded receipt. Nothing here is editable.
+function VerificationCard({ v, billAmount }) {
+  if (!v) return null;
+  const statusLabel = { success: 'Successful', failed: 'Failed', pending: 'Pending', unknown: 'Not readable' }[v.payment_status] || v.payment_status || 'Not readable';
+  const final = v.verification_status;
   return (
-    <div className="space-y-4" data-testid="qr-scanner">
-      <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {hint && <p className="text-sm text-muted-foreground mt-1">{hint}</p>}
+    <div className="rounded-xl border overflow-hidden" data-testid="verification-card">
+      <div className="px-4 py-3 bg-muted/40 border-b">
+        <h3 className="font-semibold text-sm">Payment Receipt Verification</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">Auto-extracted from your receipt · not editable</p>
       </div>
-      <div className="relative rounded-2xl overflow-hidden bg-black aspect-square max-w-sm mx-auto border border-border">
-        <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-        <canvas ref={canvasRef} className="hidden" />
-        {status !== 'running' && (
-          <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">
-            {status === 'starting' ? <Loader2 className="h-6 w-6 animate-spin" /> : <Camera className="h-8 w-8" />}
-          </div>
-        )}
+      <div className="px-4 py-2 divide-y divide-border/60">
+        <CheckRow label="Payment Status" value={statusLabel} ok={v.payment_status === 'success' ? true : (v.payment_status === 'unknown' ? null : false)} />
+        <CheckRow label="Bill Amount" value={money(billAmount)} mono />
+        <CheckRow label="Payment Amount" value={v.extracted_amount != null ? money(v.extracted_amount) : 'Not readable'} ok={v.extracted_amount != null ? true : null} mono />
+        <CheckRow label="Amount Match" value={v.amount_matched ? 'Matched' : 'Mismatch'} ok={v.amount_matched} />
+        <CheckRow label="Receiver" value={v.payee_name || '—'} />
+        <CheckRow label="Receiver UPI" value={v.payee_upi || '—'} mono />
+        <CheckRow label="Receiver Match" value={v.receiver_matched === true ? 'Matched' : v.receiver_matched === false ? 'Mismatch' : 'Not on receipt'} ok={v.receiver_matched} />
+        <CheckRow label="UTR / UPI Ref" value={v.extracted_utr || 'Not readable'} ok={v.extracted_utr ? true : null} mono />
+        <CheckRow label="Transaction ID" value={v.extracted_transaction_id || '—'} mono />
+        <CheckRow label="Payment App" value={v.payment_provider || '—'} />
+        <CheckRow label="Date" value={v.transaction_date || '—'} mono />
+        <CheckRow label="Time" value={v.transaction_time || '—'} mono />
+        <CheckRow label="Duplicate Check" value={v.duplicate_check === 'duplicate' ? 'Already used' : 'New Transaction'} ok={v.duplicate_check !== 'duplicate'} />
       </div>
-      {err && <p className="text-sm text-red-600 text-center" data-testid="scan-error">{err}</p>}
-      <div className="max-w-sm mx-auto space-y-2">
-        <label className="flex items-center justify-center gap-2 text-sm border border-dashed rounded-xl py-2 cursor-pointer hover:bg-muted/50">
-          <Upload className="h-4 w-4" /> Upload QR image
-          <input type="file" accept="image/*" className="hidden" onChange={onFile} data-testid="scan-upload" />
-        </label>
-        <div className="text-center text-xs text-muted-foreground">or enter UPI ID manually</div>
-        <Input placeholder="merchant name (optional)" value={manualName} onChange={(e) => setManualName(e.target.value)} data-testid="manual-upi-name" />
-        <Input placeholder="name@bank" value={manualUpi} onChange={(e) => setManualUpi(e.target.value)} data-testid="manual-upi-input" />
-        <div className="flex gap-2">
-          <Button className="flex-1" onClick={submitManual} data-testid="manual-upi-submit">Use this UPI</Button>
-          {onCancel && <Button variant="outline" onClick={() => { stop(); onCancel(); }} data-testid="scan-cancel">Cancel</Button>}
-        </div>
+      {(v.failure_reasons || []).length > 0 && final !== 'verified' && (
+        <ul className="px-4 pb-3 space-y-1" data-testid="verification-failures">
+          {v.failure_reasons.map((r, i) => (
+            <li key={i} className="text-xs text-red-600 flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />{r}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div
+        data-testid="verification-final-status"
+        className={`px-4 py-3 text-sm font-bold flex items-center gap-2 ${
+          final === 'verified' ? 'bg-emerald-50 text-emerald-700'
+            : final === 'rejected' ? 'bg-red-50 text-red-700'
+            : 'bg-amber-50 text-amber-700'
+        }`}
+      >
+        {final === 'verified'
+          ? <><CheckCircle2 className="h-5 w-5" /> PAYMENT VERIFIED</>
+          : final === 'rejected'
+            ? <><XCircle className="h-5 w-5" /> PAYMENT NOT VERIFIED</>
+            : <><AlertTriangle className="h-5 w-5" /> REVIEW REQUIRED</>}
       </div>
     </div>
   );
@@ -142,13 +89,13 @@ export default function PayNow() {
   const [txn, setTxn] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [utrFull, setUtrFull] = useState('');
-  const [utrLast4, setUtrLast4] = useState('');
-  const [screenshot, setScreenshot] = useState(null);
-  const [extracting, setExtracting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [needsFee, setNeedsFee] = useState(null);
+  const [payeeName, setPayeeName] = useState('');
+  const [payeeUpi, setPayeeUpi] = useState('');
+  const [payeeAmount, setPayeeAmount] = useState('');
 
-  // Load draft + resume any pending transaction (app-close recovery, spec §35).
+  // Load draft + resume any pending transaction (app-close recovery).
   const refresh = useCallback(async (tid) => {
     try { const { data } = await api.get(`/manual-pay/${tid}`); setTxn(data); return data; }
     catch { localStorage.removeItem(TXN_KEY); setTxn(null); return null; }
@@ -156,8 +103,6 @@ export default function PayNow() {
 
   // Only these money-sensitive states are worth auto-resuming (user already told
   // us they paid the merchant, so we must not lose the proof/fee/receipt step).
-  // Anything earlier (just scanned, not yet paid) is treated as abandoned so a
-  // NEW payment always starts fresh instead of re-opening the old vendor.
   const RESUMABLE = ['merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
 
   useEffect(() => {
@@ -172,8 +117,6 @@ export default function PayNow() {
           if (data && !data.bill_id && RESUMABLE.includes(data.state)) {
             setTxn(data); // resume the in-progress, money-sensitive payment
           } else {
-            // Early (only-scanned) or already-completed/cancelled → don't force the
-            // old vendor. Best-effort cancel the abandoned session, then start fresh.
             if (data && ['second_qr_required', 'awaiting_merchant_payment'].includes(data.state)) {
               api.post(`/manual-pay/${tid}/cancel`).catch(() => {});
             }
@@ -194,18 +137,23 @@ export default function PayNow() {
   }, [refresh]);
 
   const draftAmount = draft?.items?.reduce((s, i) => s + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
+  const verified = txn?.merchant_verification_status === 'verified' || txn?.merchant_verification_status === 'admin_reviewed';
 
-  const doFirstScan = async (parsed) => {
+  const startPayment = async () => {
+    const upi = payeeUpi.trim().toLowerCase().replace(/\s+/g, '');
+    if (!UPI_RE.test(upi)) { toast.error('Enter a valid UPI ID like name@bank'); return; }
+    const amt = draft ? undefined : Number(payeeAmount);
+    if (!draft && (!amt || amt <= 0)) { toast.error('Enter the payment amount'); return; }
     setBusy(true);
     try {
       const { data } = await api.post('/manual-pay/first-scan', {
-        payee_upi: parsed.upi, payee_name: parsed.name || null,
-        merchant_amount: draft ? undefined : Number(parsed.amt) || undefined,
+        payee_upi: upi, payee_name: payeeName.trim() || null,
+        merchant_amount: amt,
         expense_draft: draft || undefined,
       });
       localStorage.setItem(TXN_KEY, data.transaction_id);
       setTxn(data);
-      toast.success(`Merchant locked: ${data.payee_name || data.payee_upi}`);
+      toast.success(`Payee locked: ${data.payee_name || data.payee_upi}`);
     } catch (e) { toast.error(e.response?.data?.detail || 'Could not start payment'); }
     finally { setBusy(false); }
   };
@@ -217,42 +165,23 @@ export default function PayNow() {
     finally { setBusy(false); }
   };
 
-  // When a payment screenshot is chosen, auto-read the 12-digit UTR with Gemini
-  // so the user doesn't have to type it. Falls back to manual entry on failure.
-  const onScreenshot = async (file) => {
-    setScreenshot(file || null);
+  // Receipt upload → server reads the screenshot (amount, UTR, payee, status),
+  // cross-checks it against the bill and returns the verification result.
+  const uploadProof = async (file) => {
     if (!file) return;
-    setExtracting(true);
+    setVerifying(true);
     try {
       const fd = new FormData();
-      fd.append('file', file);
-      const { data } = await api.post('/ai/extract-utr', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      if (data?.found && data?.utr) {
-        setUtrFull(String(data.utr).replace(/\D/g, '').slice(0, 12));
-        toast.success('UTR auto-filled from screenshot ✓');
-      } else {
-        toast.message("Couldn't read the UTR — please type the 12-digit UTR.");
-      }
-    } catch (e) {
-      toast.message(e.response?.data?.detail || "Couldn't read the UTR — please type it.");
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const submitProof = async () => {
-    if (utrFull && utrFull.length !== 12) { toast.error('UTR number must be exactly 12 digits'); return; }
-    if (!utrFull && !utrLast4 && !screenshot) { toast.error('Enter a UTR, last 4 digits, or upload a screenshot'); return; }
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      if (utrFull) fd.append('utr_full', utrFull);
-      if (utrLast4) fd.append('utr_last4', utrLast4);
-      if (screenshot) fd.append('screenshot', screenshot);
+      fd.append('screenshot', file);
       const { data } = await api.post(`/manual-pay/${txn.transaction_id}/proof`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setTxn(data); toast.success('Payment proof saved ✓');
-    } catch (e) { toast.error(e.response?.data?.detail || 'Could not save proof'); }
-    finally { setBusy(false); }
+      setTxn(data);
+      if (data?.verification?.verification_status === 'verified') toast.success('Payment verified ✓');
+      else toast.error('Payment not verified — see the details below');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Could not verify the receipt');
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const generate = async () => {
@@ -266,17 +195,17 @@ export default function PayNow() {
     finally { setBusy(false); }
   };
 
-  // Corporate = monthly subscription (unlimited, no fee) -> generate the bill
-  // AUTOMATICALLY once payment proof is in, with no manual "generate" prompt.
+  // Corporate = monthly subscription -> generate the bill AUTOMATICALLY once the
+  // payment is VERIFIED, with no manual "generate" prompt.
   useEffect(() => {
     if (!isCorporate) return;
     const state = txn?.state;
-    const ready = state === 'proof_submitted' || state === 'fee_due' || state === 'fee_pending';
+    const ready = verified && (state === 'proof_submitted' || state === 'fee_due' || state === 'fee_pending');
     if (ready && !txn?.bill_id && !busy && !autoGenRef.current) {
       autoGenRef.current = true;
       generate();
     }
-  }, [txn, isCorporate, busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [txn, isCorporate, busy, verified]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payFeeRazorpay = async () => {
     setBusy(true);
@@ -300,14 +229,13 @@ export default function PayNow() {
     finally { setBusy(false); }
   };
 
-  // Abandon the current (unpaid) session and begin a brand-new payment — used
-  // when the user actually wants to pay a different vendor.
+  // Abandon the current (unpaid) session and begin a brand-new payment.
   const startNew = async () => {
     const tid = txn?.transaction_id;
     if (tid) { try { await api.post(`/manual-pay/${tid}/cancel`); } catch { /* */ } }
     localStorage.removeItem(TXN_KEY);
     autoGenRef.current = false; setGenError(false);
-    setTxn(null); setNeedsFee(null); setUtrFull(''); setUtrLast4(''); setScreenshot(null);
+    setTxn(null); setNeedsFee(null);
     toast.message('Starting a new payment');
   };
 
@@ -329,6 +257,17 @@ export default function PayNow() {
 
   const st = txn?.state;
 
+  const uploadBox = (
+    <div>
+      <label className={`flex flex-col items-center justify-center gap-2 text-sm border-2 border-dashed rounded-xl py-8 px-4 text-center cursor-pointer hover:bg-muted/50 ${verifying ? 'opacity-70 pointer-events-none' : ''}`} data-testid="receipt-upload-label">
+        {verifying ? <Loader2 className="h-6 w-6 animate-spin" /> : <ReceiptText className="h-6 w-6 text-muted-foreground" />}
+        <span className="font-medium">{verifying ? 'Reading receipt & verifying payment…' : 'Upload payment receipt / screenshot'}</span>
+        <span className="text-xs text-muted-foreground">PhonePe, Paytm, GPay, BHIM or bank app — amount, UTR and payee are read automatically</span>
+        <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={verifying} onChange={(e) => uploadProof(e.target.files?.[0] || null)} data-testid="receipt-upload-input" />
+      </label>
+    </div>
+  );
+
   return (
     <div className="max-w-lg mx-auto p-4 space-y-5" data-testid="paynow-page">
       <div className="flex items-center justify-between">
@@ -338,7 +277,7 @@ export default function PayNow() {
         )}
       </div>
 
-      {/* STEP 1 — single QR scan */}
+      {/* STEP 1 — bill summary + payee details (no QR scan, no manual refs) */}
       {!txn && (
         <>
           <div className="rounded-xl border p-4 bg-muted/30" data-testid="bill-summary">
@@ -346,15 +285,37 @@ export default function PayNow() {
             <div className="text-3xl font-bold font-mono">{money(draftAmount)}</div>
             {draft?.category && <div className="text-sm text-muted-foreground mt-1">{draft.category}{draft.sub_category ? ` · ${draft.sub_category}` : ''}</div>}
           </div>
-          <QrScanner title="Scan merchant QR" hint="Scan the merchant's UPI QR once to continue." onResult={doFirstScan} onCancel={() => nav('/app/dashboard')} />
+          <div className="rounded-xl border p-4 space-y-3" data-testid="payee-form">
+            <div>
+              <h2 className="text-xl font-semibold">Who are you paying?</h2>
+              <p className="text-sm text-muted-foreground mt-1">Pay the merchant in any UPI app, then upload the payment receipt here — we verify it automatically.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Merchant / payee name (optional)</label>
+              <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="e.g. Sharma Tea Stall" data-testid="payee-name-input" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Merchant UPI ID</label>
+              <Input value={payeeUpi} onChange={(e) => setPayeeUpi(e.target.value)} placeholder="name@bank" className="font-mono" data-testid="payee-upi-input" />
+            </div>
+            {!draft && (
+              <div>
+                <label className="text-sm font-medium">Amount (₹)</label>
+                <Input value={payeeAmount} onChange={(e) => setPayeeAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="0.00" className="font-mono" data-testid="payee-amount-input" />
+              </div>
+            )}
+            <Button className="w-full" disabled={busy} onClick={startPayment} data-testid="start-payment-btn">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
+            </Button>
+          </div>
         </>
       )}
 
-      {/* STEP 2 — ready to pay merchant directly (single scan) */}
+      {/* STEP 2 — pay the merchant in your own UPI app */}
       {st === 'awaiting_merchant_payment' && (
         <div className="space-y-4" data-testid="ready-to-pay">
           <div className="rounded-xl border p-4">
-            <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium"><ShieldCheck className="h-4 w-4" /> QR Verified</div>
+            <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium"><ShieldCheck className="h-4 w-4" /> Payee locked</div>
             <div className="mt-3 text-sm text-muted-foreground">Merchant</div>
             <div className="text-lg font-semibold" data-testid="rtp-merchant">{txn.payee_name || 'UPI Payee'}</div>
             <div className="text-sm font-mono">{txn.payee_upi}</div>
@@ -365,9 +326,9 @@ export default function PayNow() {
             <p className="font-medium">Now pay this merchant using your preferred UPI app:</p>
             <ol className="list-decimal ml-5 text-muted-foreground space-y-0.5">
               <li>Open Google Pay, PhonePe, Paytm, BHIM or your bank app.</li>
-              <li>Scan the merchant's QR / pay to the UPI ID above.</li>
+              <li>Pay to the UPI ID above.</li>
               <li>Pay exactly {money(txn.merchant_amount)}.</li>
-              <li>Return to Bill4Pe.</li>
+              <li>Return to Bill4Pe and upload the payment receipt.</li>
             </ol>
           </div>
           <Button variant="outline" className="w-full" data-testid="copy-upi-btn" onClick={() => { navigator.clipboard?.writeText(txn.payee_upi); toast.success('UPI ID copied'); }}>
@@ -384,74 +345,76 @@ export default function PayNow() {
         </div>
       )}
 
-      {/* STEP 4 — payment proof */}
+      {/* STEP 3 — receipt upload (no manual UTR entry) */}
       {st === 'merchant_payment_claimed' && (
         <div className="space-y-4" data-testid="proof-screen">
-          <h2 className="text-xl font-semibold">Payment proof</h2>
+          <h2 className="text-xl font-semibold">Verify your payment</h2>
           <div className="rounded-xl border p-4 text-sm bg-muted/30">
             <div>Paid to <b>{txn.payee_name || txn.payee_upi}</b></div>
             <div className="font-mono text-muted-foreground">{txn.payee_upi}</div>
             <div className="mt-1">Amount <b>{money(txn.merchant_amount)}</b></div>
           </div>
-          <div>
-            <label className="text-sm font-medium">UPI Transaction ID / UTR (12 digits)</label>
-            <Input value={utrFull} onChange={(e) => setUtrFull(e.target.value.replace(/\D/g, '').slice(0, 12))} maxLength={12} inputMode="numeric" placeholder="12-digit UTR e.g. 401234567890" data-testid="utr-full-input" />
-            <p className="text-xs text-muted-foreground mt-1" data-testid="utr-digit-count">{utrFull.length}/12 digits</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Or last 4 digits</label>
-            <Input value={utrLast4} onChange={(e) => setUtrLast4(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1234" data-testid="utr-last4-input" />
-          </div>
-          <label className={`flex items-center justify-center gap-2 text-sm border border-dashed rounded-xl py-3 cursor-pointer hover:bg-muted/50 ${extracting ? 'opacity-70 pointer-events-none' : ''}`} data-testid="screenshot-label">
-            {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {extracting ? 'Reading UTR from screenshot…' : (screenshot ? screenshot.name : 'Upload payment screenshot to auto-read UTR')}
-            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={extracting} onChange={(e) => onScreenshot(e.target.files?.[0] || null)} data-testid="screenshot-input" />
-          </label>
-          <Button className="w-full" disabled={busy} onClick={submitProof} data-testid="submit-proof-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit proof'}</Button>
+          {uploadBox}
+          <p className="text-xs text-muted-foreground text-center">
+            The receipt is read automatically — there is no manual UTR entry. Make sure the full receipt with amount, success status and UTR is visible.
+          </p>
+          {txn.verification && <VerificationCard v={txn.verification} billAmount={txn.merchant_amount} />}
         </div>
       )}
 
-      {/* STEP 5 — proof saved → generate receipt (+ fee) */}
+      {/* STEP 4 — verification result → fee / generate receipt */}
       {(st === 'proof_submitted' || st === 'fee_due' || st === 'fee_pending') && (
         <div className="space-y-4" data-testid="generate-screen">
-          <div className="rounded-xl border p-4 bg-emerald-50 text-emerald-800 text-sm flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5" /> Payment details saved — <b>Confirmed by user</b>
-          </div>
-          <div className="rounded-xl border p-4 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-muted-foreground">Merchant amount</span><span className="font-mono">{money(txn.merchant_amount)}</span></div>
-            {isCorporate ? (
-              <div className="flex justify-between"><span className="text-muted-foreground">Convenience fee</span><span className="font-mono text-emerald-700 font-semibold">Free · Subscription</span></div>
-            ) : (
-              <div className="flex justify-between"><span className="text-muted-foreground">Bill4Pe fee ({txn.platform_fee_percent}%)</span><span className="font-mono">{money(txn.platform_fee)}</span></div>
-            )}
-          </div>
-          {isCorporate ? (
-            genError ? (
-              <div className="rounded-xl border p-4 space-y-3" data-testid="auto-generate-error">
-                <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Couldn't generate the bill. Please retry.</div>
-                <Button className="w-full" disabled={busy} onClick={generate} data-testid="retry-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry'}</Button>
-              </div>
-            ) : (
-              <div className="rounded-xl border p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="auto-generating-bill">
-                <Loader2 className="h-4 w-4 animate-spin" /> Generating your bill automatically…
-              </div>
-            )
-          ) : (!needsFee && (
-            <Button className="w-full" disabled={busy} onClick={generate} data-testid="generate-receipt-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate Bill4Pe digital receipt'}</Button>
-          ))}
-          {needsFee && (
-            <div className="rounded-xl border p-4 space-y-3" data-testid="fee-due-box">
-              <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Service fee due</div>
-              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Wallet balance</span><span className="font-mono">{money(needsFee.wallet_balance)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Amount due</span><span className="font-mono">{money(needsFee.fee)}</span></div>
-              <Button className="w-full" disabled={busy} onClick={payFeeRazorpay} data-testid="pay-fee-btn">Pay {money(needsFee.fee)} (Bill4Pe Fee QR)</Button>
-              <Button variant="outline" className="w-full" onClick={() => nav('/app/wallet')} data-testid="add-money-btn">Add money to wallet</Button>
+          {txn.verification && <VerificationCard v={txn.verification} billAmount={txn.merchant_amount} />}
+          {!verified ? (
+            <div className="space-y-3" data-testid="reupload-box">
+              <p className="text-sm text-muted-foreground text-center">
+                We couldn't verify this payment receipt automatically. Please upload a clear, complete payment receipt.
+              </p>
+              {uploadBox}
             </div>
+          ) : (
+            <>
+              <div className="rounded-xl border p-4 bg-emerald-50 text-emerald-800 text-sm flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" /> Payment verified — <b>receipt matched</b>
+              </div>
+              <div className="rounded-xl border p-4 text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Merchant amount</span><span className="font-mono">{money(txn.merchant_amount)}</span></div>
+                {isCorporate ? (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Convenience fee</span><span className="font-mono text-emerald-700 font-semibold">Free · Subscription</span></div>
+                ) : (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Bill4Pe fee ({txn.platform_fee_percent}%)</span><span className="font-mono">{money(txn.platform_fee)}</span></div>
+                )}
+              </div>
+              {isCorporate ? (
+                genError ? (
+                  <div className="rounded-xl border p-4 space-y-3" data-testid="auto-generate-error">
+                    <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Couldn't generate the bill. Please retry.</div>
+                    <Button className="w-full" disabled={busy} onClick={generate} data-testid="retry-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry'}</Button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="auto-generating-bill">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Generating your bill automatically…
+                  </div>
+                )
+              ) : (!needsFee && (
+                <Button className="w-full" disabled={busy} onClick={generate} data-testid="generate-receipt-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate Bill4Pe digital receipt'}</Button>
+              ))}
+              {needsFee && (
+                <div className="rounded-xl border p-4 space-y-3" data-testid="fee-due-box">
+                  <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Service fee due</div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Wallet balance</span><span className="font-mono">{money(needsFee.wallet_balance)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Amount due</span><span className="font-mono">{money(needsFee.fee)}</span></div>
+                  <Button className="w-full" disabled={busy} onClick={payFeeRazorpay} data-testid="pay-fee-btn">Pay {money(needsFee.fee)} (service fee)</Button>
+                  <Button variant="outline" className="w-full" onClick={() => nav('/app/wallet')} data-testid="add-money-btn">Add money to wallet</Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
 
-      {/* STEP 6 — done */}
+      {/* STEP 5 — done */}
       {(st === 'completed' || txn?.bill_id) && (
         <div className="space-y-4 text-center" data-testid="receipt-done">
           <CheckCircle2 className="h-14 w-14 text-emerald-600 mx-auto" />

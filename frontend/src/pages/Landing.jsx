@@ -129,7 +129,7 @@ const ScreenUPIScan = () => (
     <div className="px-4 pt-4 pb-3 flex items-center justify-between">
       <div className="flex items-center gap-1.5">
         <QrCode className="w-3.5 h-3.5 text-lime" />
-        <span className="text-[10px] tracking-[0.2em] uppercase font-semibold">Scan UPI QR</span>
+        <span className="text-[10px] tracking-[0.2em] uppercase font-semibold">Pay via UPI</span>
       </div>
       <span className="text-[9px] text-white/40 font-mono">STEP 2 / 3</span>
     </div>
@@ -550,7 +550,7 @@ const Hero = () => {
             </h1>
             <p className="mt-6 text-base sm:text-lg text-white/70 max-w-xl leading-relaxed">
               BILL4PE turns every UPI payment into a corporate-ready reimbursement invoice using
-              AI vision. Snap a photo. Scan a QR. Get a PDF. Built for the modern Indian workforce.
+              AI vision. Snap a photo. Pay via UPI. Get a PDF. Built for the modern Indian workforce.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
               <button
@@ -610,7 +610,7 @@ const Hero = () => {
 const HowItWorks = () => {
   const steps = [
     { icon: ScanLine, t: 'Snap or Type', d: 'Take a photo of your meal or any products items intend to buy and AI detects every item and price automatically if the price tag is precise, else to be fed manually.' },
-    { icon: QrCode, t: 'Scan UPI QR', d: 'Tap Pay Now. Scan any merchant QR — GPay, PhonePe, Paytm, BharatPe. We auto-capture merchant name, UPI ID and txn details.' },
+    { icon: QrCode, t: 'Pay via UPI', d: 'Pay with any UPI app — GPay, PhonePe, Paytm, BHIM. Upload the receipt and we auto-verify the amount, UTR and payee.' },
     { icon: FileText, t: 'Get the Invoice', d: 'Generates a professional PDF reimbursement invoice. Share it, download it, file your expense.' },
   ];
   return (
@@ -998,7 +998,7 @@ const MobileLanding = () => {
           <span className="text-white/70 text-3xl">Done in 60 seconds.</span>
         </h1>
         <p className="mt-4 text-sm text-white/65 leading-relaxed">
-          Snap a meal. Scan a UPI QR. Get a reimbursement-ready PDF invoice — instantly.
+          Snap a meal. Pay via UPI. Get a reimbursement-ready PDF invoice — instantly.
         </p>
       </div>
 
@@ -1006,7 +1006,7 @@ const MobileLanding = () => {
       <div className="relative px-5 grid grid-cols-3 gap-2.5 mt-2">
         {[
           { icon: ScanLine, t: 'AI Snap', d: 'Items auto-detected' },
-          { icon: QrCode, t: 'UPI Pay', d: 'Any merchant QR' },
+          { icon: QrCode, t: 'UPI Pay', d: 'Receipt auto-verified' },
           { icon: FileText, t: 'PDF Bill', d: 'Audit-ready' },
         ].map(({ icon: Icon, t, d }) => (
           <div key={t} className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-center">

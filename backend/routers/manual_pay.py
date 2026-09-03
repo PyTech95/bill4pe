@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -101,25 +101,28 @@ async def cancel(tid: str, user=Depends(get_current_user)):
 @router.post("/manual-pay/{tid}/proof")
 async def submit_proof(
     tid: str,
-    utr_full: Optional[str] = Form(None),
-    utr_last4: Optional[str] = Form(None),
-    screenshot: Optional[UploadFile] = File(None),
+    screenshot: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    stored_name = None
-    if screenshot is not None:
-        ext = os.path.splitext(screenshot.filename or "")[1].lower()
-        if screenshot.content_type not in _ALLOWED_CT or ext not in _ALLOWED_EXT:
-            raise HTTPException(400, "Only JPG, PNG or WEBP screenshots are allowed")
-        data = await screenshot.read()
-        if len(data) > _MAX_BYTES:
-            raise HTTPException(400, "Screenshot must be under 5 MB")
-        if not data:
-            raise HTTPException(400, "Empty file")
-        stored_name = f"{tid}_{uuid.uuid4().hex}{ext}"
-        (PROOF_DIR / stored_name).write_bytes(data)
+    """Receipt-first proof: the screenshot is the ONLY accepted evidence.
+    No client-typed UTR/reference is accepted — values come from server-side OCR."""
+    ext = os.path.splitext(screenshot.filename or "")[1].lower()
+    if screenshot.content_type not in _ALLOWED_CT or ext not in _ALLOWED_EXT:
+        raise HTTPException(400, "Only JPG, PNG or WEBP screenshots are allowed")
+    data = await screenshot.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > _MAX_BYTES:
+        raise HTTPException(400, "Screenshot must be under 5 MB")
+    from services import receipt_verify
     try:
-        return await mf.submit_proof(user, tid, utr_full, utr_last4, stored_name)
+        norm, mime = receipt_verify.prepare_image(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    stored_name = f"{tid}_{uuid.uuid4().hex}{'.jpg' if ext in ('.jpg', '.jpeg') else ext}"
+    (PROOF_DIR / stored_name).write_bytes(data)
+    try:
+        return await mf.submit_proof(user, tid, stored_name, norm, mime)
     except LookupError:
         raise HTTPException(404, "Transaction not found")
     except ValueError as e:

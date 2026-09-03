@@ -184,3 +184,30 @@ Rules:
 - The UTR must be exactly 12 digits. Strip spaces and any non-digit characters.
 - If several numbers are present, choose the one labelled UTR / UPI transaction ID / reference / RRN — NOT the amount, phone number, account number or date.
 - If you cannot find a clear 12-digit UPI reference number, return {"utr":"","found":false}."""
+
+
+PAYMENT_RECEIPT_PROMPT = """You are reading a screenshot of an Indian UPI payment receipt (PhonePe, Paytm, Google Pay, BHIM, or a bank UPI app).
+
+Extract every visible field into STRICT JSON only (no markdown, no prose, no code fences):
+{
+ "status": "<exact success/failure wording on the receipt, e.g. 'Transaction Successful', 'Sent Successfully', 'Paid', 'Completed', 'Failed', 'Pending'>",
+ "amount": <number, the amount paid in INR — the transaction amount only, NOT any wallet balance, cashback or offer amount>,
+ "currency": "INR",
+ "utr": "<UTR / UPI Ref No / RRN — the numeric bank reference, usually exactly 12 digits, digits only>",
+ "transaction_id": "<the app transaction id if shown, e.g. PhonePe 'T2609...' — often alphanumeric>",
+ "transaction_date": "YYYY-MM-DD",
+ "transaction_time": "HH:MM (24-hour)",
+ "payee_name": "<receiver / 'Paid to' / 'To' name>",
+ "payee_upi": "<receiver UPI ID — may be masked like XXXXXXX7534@ptyes>",
+ "payer_name": "<sender / 'From' name if shown>",
+ "payer_upi": "<sender UPI ID if shown>",
+ "bank_name": "<bank name if visible>",
+ "bank_account_masked": "<masked account like XXXX1234 if visible>",
+ "provider": "<PhonePe | Paytm | Google Pay | BHIM | bank app name>",
+ "extra_reference": "<any other transaction/reference number shown>"
+}
+
+Rules:
+- The UTR is the numeric bank reference labelled UTR / UPI Ref No / UPI Reference / RRN. Do NOT confuse it with the app transaction ID, phone number, account number, or date.
+- Convert dates like '01 Sep 2026' to 2026-09-01 and times like '02:10 PM' to 14:10.
+- If a field is not visible or not clearly readable, use null. NEVER guess or invent values."""

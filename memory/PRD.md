@@ -1,34 +1,48 @@
-# bill4pe — PRD
+# BILL4PE — PRD & Working Log
 
-## Original Problem Statement
-Deploy/harden "bill4pe", a billing/invoicing web app for Indian small businesses (UPI/PhonePe-style payments). Plan assumed an existing zip to validate — **no zip was provided**, so the app was built from scratch per the spec: invoices, customer records (PII/GST), payments, auth + role separation, hardened config (secrets in env, locked CORS).
+## Product
+BILL4PE turns UPI payments into corporate reimbursement invoices. User pays a merchant
+directly in their own UPI app, uploads the payment receipt, the system auto-reads and
+verifies it, and generates a GST-style bill. Revenue = configurable per-bill fee.
 
-## Decisions (user skipped clarification → best judgment)
-- Payments: manual recording + UPI deep-link/QR (no live gateway → no payment secrets at risk). Stripe/Razorpay gateway is a backlog item.
-- DB: MongoDB. Auth: JWT httpOnly cookies (custom email/password) with roles.
-- Admin/owner account: meland@mhem.in (see /app/memory/test_credentials.md).
+## Stack
+- Frontend: React (CRA + craco, Tailwind, shadcn/ui) — /app/frontend
+- Backend: FastAPI (routers/ + core/ + services/) — /app/backend, entry server.py
+- DB: MongoDB (MONGO_URL/DB_NAME from backend/.env)
+- AI: Gemini via EMERGENT_LLM_KEY proxy (models pinned to gemini-2.5-flash in .env —
+  the "-latest" aliases are NOT supported by the Emergent proxy); GEMINI_API_KEY direct
+  on VPS.
+- Payments: Razorpay DISABLED on staging (no keys). PAYMENT_FLOW_MODE=manual_upi_double_scan,
+  ALLOW_MOCK_RECHARGE=true. Super admin: meland@mhem.in (see test_credentials.md).
 
-## User Personas
-- Admin/Owner (meland@mhem.in): full access to own business workspace.
-- Staff (role=staff): registered users managing their own billing workspace.
+## Deployed environment
+- Code from founder's bill4pe-main.zip installed into /app (2026-09-03), replacing the
+  placeholder scaffold (scaffold preserved in git commit "scaffold billing app…").
+- Preview URL: https://invoice-staging-2.preview.emergentagent.com
 
-## Architecture
-- Backend: /app/backend/server.py (FastAPI, single module) — /api/auth (register/login/logout/me/refresh/forgot/reset, bcrypt, JWT cookies, 5-attempt/15-min lockout, admin seed), /api/settings, /api/customers CRUD (with outstanding aggregation), /api/invoices CRUD + /send + /payments (idempotent on reference → 409), /api/dashboard/stats. Server-side GST totals (CGST/SGST vs IGST). CORS locked to FRONTEND_URL + localhost.
-- Frontend: /app/frontend/src — pages: Login, Register, Dashboard (KPIs, 6-mo recharts area chart, recent invoices, top customers), Invoices (search + status tabs), InvoiceBuilder (line items, GST slabs, discount, live totals, UPI QR preview), InvoiceDetail (print sheet, UPI QR/copy-link, payment modal, WhatsApp share), Customers (cards + modal CRUD), Settings. Context: AuthContext; lib: api.js (axios + 401 refresh interceptor), format.js (INR en-IN, UPI link, GST totals). Design per /app/design_guidelines.json (Outfit/Plus Jakarta Sans/JetBrains Mono, #5E35B1 brand, dark slate sidebar).
-
-## Implemented (2026-09-03)
-- Full auth (admin seeded, lockout, refresh tokens, forgot/reset via console-logged link)
-- Customers with outstanding balances; Invoices with GST math, statuses (draft/pending/paid/overdue auto), auto numbering (INV-0001…)
-- Payment recording (partial/full, modes, duplicate-reference idempotency), UPI QR + payment links
-- Dashboard stats; Settings (business profile, UPI ID, bank, prefix, terms); print-ready invoice
-- Testing: 16/16 backend pytest + full Playwright pass (/app/test_reports/iteration_1.json)
-- Sample data present: customer "Sharma Textiles", INV-0001 (overdue, ₹5,610 due), INV-0002 (paid ₹7,610)
+## Implemented (2026-09-03) — Receipt-first payment verification overhaul
+- REMOVED merchant-QR payment flow from UI: PayNow step 1 is now a payee form
+  (name + UPI ID [+ amount when no draft]); QrScanner/jsQR/manual-UPI-entry deleted.
+  Landing/Terms/TravelSubCategory merchant-QR copy updated. Bill-authenticity QR
+  (Verify.jsx) intentionally untouched.
+- REMOVED manual UTR / last-4 entry: proof endpoint accepts ONLY a receipt screenshot
+  (screenshot File required; extra form fields ignored → 422 without file).
+- NEW services/receipt_verify.py: image validation (type/size/PIL corruption/EXIF
+  orientation/downscale), Gemini full-receipt extraction (status, amount, UTR, txn id,
+  date/time, payee/payer names+UPIs, bank, provider, extra ref) → structured record.
+- Server-side verification: success-status check, Decimal-paise exact amount match vs
+  frozen bill amount, normalized+masked-aware receiver UPI match, duplicate UTR/txn-id
+  (unique partial indexes on receipt_verifications + cross-check manual_transactions).
+- Approval rule: verified ONLY when status=success AND amount matched AND receiver not
+  mismatched AND reference present AND not duplicate → else rejected / review_required.
+  generate_receipt gated on verified|admin_reviewed. Bill amount never overwritten.
+- PayNow.jsx: read-only verification result card (per-check ✅/❌ + final banner),
+  re-upload on failure, corporate auto-generate only after verified.
+- DB: receipt_verifications collection stores all fields + ocr_raw_data + timestamps.
+- Verified via live curl suite T1–T7 (clean/mismatch/failed/wrong-payee/duplicate/
+  manual-UTR-422/generate-gating) — all pass; Gemini reads PhonePe/Paytm/GPay formats.
 
 ## Backlog
-- P0 (before real money): payment gateway (Stripe/Razorpay) with webhook signature verification + reconciliation; go-live deploy to production URL
-- P1: invoice PDF export (server-side), email/WhatsApp invoice send, password-reset email delivery (Resend), admin view across users
-- P2: CSV export, recurring invoices, inventory/items catalog, e-invoicing (IRN) compliance
-
-## Next Tasks
-1. Deploy to preview → smoke test → promote (payment gateway integration when keys chosen)
-2. Split server.py into routers as features grow
+- P0: production deploy (user confirmed-free deployment pending), Razorpay keys → live fee
+- P1: email delivery (Resend), superadmin review queue UI for review_required receipts
+- P2: payout (RazorpayX) collect-and-settle model, mobile builds (capacitor dirs excluded)
