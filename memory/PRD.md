@@ -46,3 +46,15 @@ verifies it, and generates a GST-style bill. Revenue = configurable per-bill fee
 - P0: production deploy (user confirmed-free deployment pending), Razorpay keys → live fee
 - P1: email delivery (Resend), superadmin review queue UI for review_required receipts
 - P2: payout (RazorpayX) collect-and-settle model, mobile builds (capacitor dirs excluded)
+
+## Implemented (2026-09-03, later) — Discard-bill / restart-payment bug fix
+Root causes: no discard action (draft left in sessionStorage), blind localStorage
+resume, GET /manual-pay/{tid} returning cancelled txns, multiple active attempts.
+Fixes: POST /api/manual-pay/{tid}/discard (cancel bill+attempt; blocked when
+verified/finalized) and /restart (new attempt, SAME bill, empty receipt state);
+get_status returns None (404) for cancelled; first_scan supersedes lingering active
+attempts; PayNow resume auto-discards stale attempt when draft amount ≠ attempt
+amount; "Discard Bill & Start New" + confirm modal wipes React state +
+localStorage bill4pe_manual_txn + sessionStorage bill4pe_draft and navs to
+/app/capture. Verified: pytest 7/7 + Playwright acceptance test incl.
+refresh/back-forward (iteration_3.json).

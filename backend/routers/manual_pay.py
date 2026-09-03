@@ -98,6 +98,30 @@ async def cancel(tid: str, user=Depends(get_current_user)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/manual-pay/{tid}/discard")
+async def discard(tid: str, user=Depends(get_current_user)):
+    """Discard the whole bill: cancel bill + payment attempt (audit record kept,
+    never active again). Blocked for finalized/verified payments."""
+    try:
+        return await mf.discard(user, tid)
+    except LookupError:
+        raise HTTPException(404, "Transaction not found")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/manual-pay/{tid}/restart")
+async def restart(tid: str, user=Depends(get_current_user)):
+    """New payment attempt for the SAME bill — old attempt cancelled, receipt /
+    OCR / UTR / verification state reset, bill amount and payee preserved."""
+    try:
+        return await mf.restart(user, tid)
+    except LookupError:
+        raise HTTPException(404, "Transaction not found")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/manual-pay/{tid}/proof")
 async def submit_proof(
     tid: str,

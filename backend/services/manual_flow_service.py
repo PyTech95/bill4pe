@@ -156,6 +156,23 @@ async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, exp
     b = compute_fee_breakdown(merchant_amount_paise, fee_percent)
 
     tid = f"B4P-{now_iso()[:4]}-{uuid.uuid4().hex[:8].upper()}"
+
+    # Only ONE active payment attempt per user: supersede any lingering ones so
+    # an abandoned/discarded bill can never resurface as the current payment.
+    await db.manual_transactions.update_many(
+        {
+            "user_id": user["id"],
+            "state": {"$in": [S_SECOND_QR_REQUIRED, S_AWAITING_MERCHANT_PAYMENT,
+                              S_MERCHANT_PAYMENT_CLAIMED, S_PROOF_SUBMITTED,
+                              S_FEE_DUE, S_FEE_PENDING]},
+            "bill_id": None,
+            "fee_status": {"$ne": "paid"},
+        },
+        {"$set": {"state": "cancelled", "merchant_payment_status": "cancelled",
+                  "cancel_reason": "superseded_by_new_attempt",
+                  "payment_session_locked": False, "updated_at": now_iso()}},
+    )
+
     doc = {
         "id": tid,
         "user_id": user["id"],
@@ -239,6 +256,90 @@ async def cancel(user, tid):
                   "payment_session_locked": False, "updated_at": now_iso()}},
     )
     return {"cancelled": True}
+
+
+# ---------------- Discard bill & start fresh / Restart payment attempt ----------------
+_FINALIZED_MSG = "This payment is already finalized — it cannot be discarded (use admin void/refund)"
+
+
+async def discard(user, tid):
+    """Discard the current bill AND its payment attempt. The record stays in the
+    database for audit (state=cancelled) but never resurfaces in the active flow.
+    Blocked once money is genuinely verified/finalized."""
+    txn = await _owned(user, tid)
+    if txn.get("fee_status") == "paid" or txn.get("bill_id") or txn.get("bill_status") == "generated":
+        raise ValueError(_FINALIZED_MSG)
+    if txn.get("merchant_verification_status") in ("verified", "admin_reviewed"):
+        raise ValueError(_FINALIZED_MSG)
+    await db.manual_transactions.update_one(
+        {"id": tid, "user_id": user["id"]},
+        {"$set": {"state": "cancelled", "merchant_payment_status": "cancelled",
+                  "cancel_reason": "discarded_by_user",
+                  "payment_session_locked": False, "updated_at": now_iso()}},
+    )
+    logger.info("[manual_flow] discarded txn=%s user=%s", tid, user["id"])
+    return {"success": True, "transaction_id": tid, "state": "cancelled",
+            "active_bill": None, "active_payment_attempt": None, "start_fresh": True}
+
+
+async def restart(user, tid):
+    """Start a NEW payment attempt for the SAME bill: cancel the old attempt and
+    clone the frozen bill/payee data into a fresh attempt with an empty receipt
+    state (no receipt, no OCR, no UTR, no verification)."""
+    txn = await _owned(user, tid)
+    if txn.get("state") == "cancelled":
+        raise ValueError("This session is already cancelled — start a new payment from the bill")
+    if txn.get("fee_status") == "paid" or txn.get("bill_id") or txn.get("bill_status") == "generated":
+        raise ValueError(_FINALIZED_MSG)
+    if txn.get("merchant_verification_status") in ("verified", "admin_reviewed"):
+        raise ValueError("Payment already verified — cannot restart this attempt")
+    await db.manual_transactions.update_one(
+        {"id": tid, "user_id": user["id"]},
+        {"$set": {"state": "cancelled", "merchant_payment_status": "cancelled",
+                  "cancel_reason": "replaced_by_new_attempt",
+                  "payment_session_locked": False, "updated_at": now_iso()}},
+    )
+    doc = {
+        "id": f"B4P-{now_iso()[:4]}-{uuid.uuid4().hex[:8].upper()}",
+        "user_id": user["id"],
+        "company_id": txn.get("company_id"),
+        "flow_mode": txn.get("flow_mode", "manual_upi_double_scan"),
+        "state": S_AWAITING_MERCHANT_PAYMENT,
+        "payee_name_snapshot": txn.get("payee_name_snapshot"),
+        "payee_upi_snapshot": txn.get("payee_upi_snapshot"),
+        "merchant_amount_paise": txn.get("merchant_amount_paise"),
+        "first_qr_verified": True,
+        "first_qr_payload_hash": None,
+        "second_qr_verified": True,
+        "second_qr_verified_at": now_iso(),
+        "payment_session_locked": True,
+        "merchant_payment_status": "awaiting_payment",
+        "merchant_payment_claimed_at": None,
+        "merchant_verification_status": "unverified",
+        "utr_full": None,
+        "utr_last4": None,
+        "proof_file": None,
+        "proof_status": "none",
+        "proof_uploaded_at": None,
+        "platform_fee_percent_snapshot": txn.get("platform_fee_percent_snapshot"),
+        "platform_fee_paise": txn.get("platform_fee_paise", 0),
+        "fee_status": "not_started",
+        "fee_payment_method": None,
+        "wallet_ledger_id": None,
+        "fee_payment_session_id": None,
+        "razorpay_fee_order_id": None,
+        "razorpay_fee_payment_id": None,
+        "expense_draft": txn.get("expense_draft"),
+        "expense_id": None,
+        "bill_id": None,
+        "bill_status": "pending",
+        "replaces_attempt": tid,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.manual_transactions.insert_one(doc)
+    logger.info("[manual_flow] restart txn=%s replaces=%s", doc["id"], tid)
+    return _public(doc)
 
 
 # ---------------- 3) Confirm "Did you pay?" ----------------
@@ -545,6 +646,9 @@ async def verify_fee_payment(user, tid, order_id, payment_id, signature):
 async def get_status(user, tid):
     txn = await db.manual_transactions.find_one({"id": tid})
     if not txn or txn.get("user_id") != user["id"]:
+        return None
+    # Cancelled/discarded/superseded attempts are audit-only — never ACTIVE.
+    if txn.get("state") == "cancelled":
         return None
     return _public(txn)
 

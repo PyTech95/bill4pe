@@ -12,6 +12,11 @@ const TXN_KEY = 'bill4pe_manual_txn';
 const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
 const UPI_RE = /^[\w.-]{2,}@[\w.-]{2,}$/;
 
+// Only these money-sensitive states are worth auto-resuming (user already told
+// us they paid the merchant, so we must not lose the proof/fee/receipt step).
+// Cancelled/discarded/superseded attempts return 404 and are never resumed.
+const RESUMABLE = ['merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
+
 function CheckRow({ label, value, ok, mono }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -94,16 +99,13 @@ export default function PayNow() {
   const [payeeName, setPayeeName] = useState('');
   const [payeeUpi, setPayeeUpi] = useState('');
   const [payeeAmount, setPayeeAmount] = useState('');
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   // Load draft + resume any pending transaction (app-close recovery).
   const refresh = useCallback(async (tid) => {
     try { const { data } = await api.get(`/manual-pay/${tid}`); setTxn(data); return data; }
     catch { localStorage.removeItem(TXN_KEY); setTxn(null); return null; }
   }, []);
-
-  // Only these money-sensitive states are worth auto-resuming (user already told
-  // us they paid the merchant, so we must not lose the proof/fee/receipt step).
-  const RESUMABLE = ['merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
 
   useEffect(() => {
     let d = null;
@@ -115,7 +117,16 @@ export default function PayNow() {
         try {
           const { data } = await api.get(`/manual-pay/${tid}`);
           if (data && !data.bill_id && RESUMABLE.includes(data.state)) {
-            setTxn(data); // resume the in-progress, money-sensitive payment
+            const currentTotal = d?.items?.reduce((s, i) => s + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
+            if (d && currentTotal > 0 && Math.abs((data.merchant_amount || 0) - currentTotal) > 0.005) {
+              // Bill contents changed since this attempt opened — invalidate the
+              // stale attempt server-side and start fresh with the new bill.
+              api.post(`/manual-pay/${tid}/discard`).catch(() => {});
+              localStorage.removeItem(TXN_KEY);
+              setTxn(null);
+            } else {
+              setTxn(data); // resume the in-progress, money-sensitive payment
+            }
           } else {
             if (data && ['second_qr_required', 'awaiting_merchant_payment'].includes(data.state)) {
               api.post(`/manual-pay/${tid}/cancel`).catch(() => {});
@@ -229,19 +240,48 @@ export default function PayNow() {
     finally { setBusy(false); }
   };
 
-  // Abandon the current (unpaid) session and begin a brand-new payment.
+  // Start a NEW payment attempt for the SAME bill: the old attempt is cancelled
+  // server-side and the fresh attempt has an empty receipt/OCR/verification state.
   const startNew = async () => {
     const tid = txn?.transaction_id;
-    if (tid) { try { await api.post(`/manual-pay/${tid}/cancel`); } catch { /* */ } }
+    if (!tid) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/manual-pay/${tid}/restart`);
+      localStorage.setItem(TXN_KEY, data.transaction_id);
+      autoGenRef.current = false; setGenError(false); setNeedsFee(null);
+      setTxn(data);
+      toast.success('New payment attempt started for the same bill');
+    } catch (e) { toast.error(e.response?.data?.detail || 'Could not start a new payment attempt'); }
+    finally { setBusy(false); }
+  };
+
+  // Discard the WHOLE bill: cancel bill + payment attempt server-side, then wipe
+  // every active reference (React state, localStorage, sessionStorage) so the old
+  // bill/receipt/UTR/verification can never resurface. Only proceeds after the
+  // server confirms the discard.
+  const discardBill = async () => {
+    const tid = txn?.transaction_id;
+    setBusy(true);
+    try {
+      if (tid) await api.post(`/manual-pay/${tid}/discard`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Could not discard the bill');
+      setBusy(false);
+      return;
+    }
     localStorage.removeItem(TXN_KEY);
-    autoGenRef.current = false; setGenError(false);
-    setTxn(null); setNeedsFee(null);
-    toast.message('Starting a new payment');
+    sessionStorage.removeItem('bill4pe_draft');
+    autoGenRef.current = false; setGenError(false); setNeedsFee(null);
+    setTxn(null); setDraft(null); setDiscardOpen(false);
+    setBusy(false);
+    toast.success('Bill discarded');
+    nav('/app/capture');
   };
 
   const cancel = async () => {
     if (!txn) { nav('/app/dashboard'); return; }
-    try { await api.post(`/manual-pay/${txn.transaction_id}/cancel`); } catch { /* */ }
+    try { await api.post(`/manual-pay/${txn.transaction_id}/discard`); } catch { /* */ }
     localStorage.removeItem(TXN_KEY); sessionStorage.removeItem('bill4pe_draft');
     autoGenRef.current = false; setGenError(false);
     setTxn(null); nav('/app/dashboard');
@@ -273,7 +313,10 @@ export default function PayNow() {
       <div className="flex items-center justify-between">
         <button onClick={() => nav(-1)} className="flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
         {txn && st !== 'completed' && !txn.bill_id && (
-          <button onClick={startNew} className="text-sm font-medium text-red-600" data-testid="start-new-payment">Start new payment</button>
+          <div className="flex items-center gap-4">
+            <button onClick={startNew} disabled={busy} className="text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="start-new-payment">Start new payment</button>
+            <button onClick={() => setDiscardOpen(true)} disabled={busy} className="text-sm font-medium text-red-600 hover:text-red-700" data-testid="discard-bill-btn">Discard Bill &amp; Start New</button>
+          </div>
         )}
       </div>
 
@@ -421,6 +464,23 @@ export default function PayNow() {
           <h2 className="text-2xl font-bold">Receipt generated</h2>
           <p className="text-muted-foreground">Bill ID <span className="font-mono">{txn.bill_id}</span></p>
           <Button className="w-full" onClick={finishDone} data-testid="view-receipt-btn">View receipt</Button>
+        </div>
+      )}
+
+      {/* Discard confirmation */}
+      {discardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDiscardOpen(false)} />
+          <div className="relative bg-background rounded-xl border p-5 w-full max-w-sm space-y-4" data-testid="discard-confirm-modal">
+            <div>
+              <h3 className="font-semibold text-lg">Discard this bill?</h3>
+              <p className="text-sm text-muted-foreground mt-1">This will cancel the current bill and payment attempt. You can create a new bill after this.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDiscardOpen(false)} data-testid="discard-keep-btn">Keep Bill</Button>
+              <Button variant="destructive" className="flex-1" disabled={busy} onClick={discardBill} data-testid="discard-confirm-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Discard & Start New'}</Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
