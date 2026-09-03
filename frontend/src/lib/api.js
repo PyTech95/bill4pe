@@ -1,42 +1,40 @@
-import axios from "axios";
+import axios from 'axios';
 
-export const API = axios.create({
-  baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
-  withCredentials: true,
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+export const API = `${BACKEND_URL}/api`;
+
+const api = axios.create({ baseURL: API });
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('bill4pe_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
-let refreshing = null;
-
-API.interceptors.response.use(
-  (res) => res,
-  async (err) => {
-    const orig = err.config;
-    if (
-      err.response?.status === 401 &&
-      orig &&
-      !orig._retry &&
-      !orig.url.includes("/auth/")
-    ) {
-      orig._retry = true;
-      try {
-        refreshing = refreshing || API.post("/auth/refresh");
-        await refreshing;
-        refreshing = null;
-        return API(orig);
-      } catch (e) {
-        refreshing = null;
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err?.response?.status === 401) {
+      localStorage.removeItem('bill4pe_token');
+      localStorage.removeItem('bill4pe_user');
+    }
+    // Normalize FastAPI error detail into a plain, renderable string so components
+    // that do `toast.error(err.response.data.detail)` never crash React with an
+    // object/array child (422 validation errors return an array of objects).
+    const d = err?.response?.data?.detail;
+    if (d != null && typeof d !== 'string') {
+      let msg;
+      if (Array.isArray(d)) {
+        msg = d.map((e) => (e && (e.msg || e.message)) || (typeof e === 'string' ? e : JSON.stringify(e))).join(', ');
+      } else if (typeof d === 'object') {
+        msg = d.msg || d.message || JSON.stringify(d);
+      } else {
+        msg = String(d);
       }
+      err.response.data.detail = msg;
     }
     return Promise.reject(err);
   }
 );
 
-export function fmtErr(e) {
-  const d = e?.response?.data?.detail;
-  if (d == null) return e?.message || "Something went wrong. Please try again.";
-  if (typeof d === "string") return d;
-  if (Array.isArray(d))
-    return d.map((x) => (x && typeof x.msg === "string" ? x.msg : JSON.stringify(x))).filter(Boolean).join(" ");
-  if (d && typeof d.msg === "string") return d.msg;
-  return String(d);
-}
+export default api;
