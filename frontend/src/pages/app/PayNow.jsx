@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, ShieldCheck, AlertTriangle, Loader2, CheckCircle2, XCircle, ArrowLeft, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Loader2, CheckCircle2, XCircle, ArrowLeft, ReceiptText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -10,12 +10,11 @@ import { useAuth } from '@/lib/auth';
 
 const TXN_KEY = 'bill4pe_manual_txn';
 const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
-const UPI_RE = /^[\w.-]{2,}@[\w.-]{2,}$/;
 
-// Only these money-sensitive states are worth auto-resuming (user already told
-// us they paid the merchant, so we must not lose the proof/fee/receipt step).
-// Cancelled/discarded/superseded attempts return 404 and are never resumed.
-const RESUMABLE = ['merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
+// Only these money-sensitive states are worth auto-resuming (the receipt upload
+// step included — we must not lose an in-progress verification). Cancelled/
+// discarded/superseded attempts return 404 and are never resumed.
+const RESUMABLE = ['awaiting_merchant_payment', 'merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
 
 function CheckRow({ label, value, ok, mono }) {
   return (
@@ -49,7 +48,9 @@ function VerificationCard({ v, billAmount }) {
         <CheckRow label="Amount Match" value={v.amount_matched ? 'Matched' : 'Mismatch'} ok={v.amount_matched} />
         <CheckRow label="Receiver" value={v.payee_name || '—'} />
         <CheckRow label="Receiver UPI" value={v.payee_upi || '—'} mono />
-        <CheckRow label="Receiver Match" value={v.receiver_matched === true ? 'Matched' : v.receiver_matched === false ? 'Mismatch' : 'Not on receipt'} ok={v.receiver_matched} />
+        {v.receiver_matched !== null && v.receiver_matched !== undefined && (
+          <CheckRow label="Receiver Match" value={v.receiver_matched ? 'Matched' : 'Mismatch'} ok={v.receiver_matched} />
+        )}
         <CheckRow label="UTR / UPI Ref" value={v.extracted_utr || 'Not readable'} ok={v.extracted_utr ? true : null} mono />
         <CheckRow label="Transaction ID" value={v.extracted_transaction_id || '—'} mono />
         <CheckRow label="Payment App" value={v.payment_provider || '—'} />
@@ -96,8 +97,6 @@ export default function PayNow() {
   const [busy, setBusy] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [needsFee, setNeedsFee] = useState(null);
-  const [payeeName, setPayeeName] = useState('');
-  const [payeeUpi, setPayeeUpi] = useState('');
   const [payeeAmount, setPayeeAmount] = useState('');
   const [discardOpen, setDiscardOpen] = useState(false);
 
@@ -128,8 +127,10 @@ export default function PayNow() {
               setTxn(data); // resume the in-progress, money-sensitive payment
             }
           } else {
-            if (data && ['second_qr_required', 'awaiting_merchant_payment'].includes(data.state)) {
+            if (data && data.state === 'second_qr_required') {
               api.post(`/manual-pay/${tid}/cancel`).catch(() => {});
+              localStorage.removeItem(TXN_KEY);
+              setTxn(null);
             }
             localStorage.removeItem(TXN_KEY);
             setTxn(null);
@@ -150,29 +151,20 @@ export default function PayNow() {
   const draftAmount = draft?.items?.reduce((s, i) => s + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
   const verified = txn?.merchant_verification_status === 'verified' || txn?.merchant_verification_status === 'admin_reviewed';
 
+  // Pay Now → create the payment attempt and go STRAIGHT to receipt upload.
+  // No payee questions: the payee is captured from the receipt OCR.
   const startPayment = async () => {
-    const upi = payeeUpi.trim().toLowerCase().replace(/\s+/g, '');
-    if (!UPI_RE.test(upi)) { toast.error('Enter a valid UPI ID like name@bank'); return; }
     const amt = draft ? undefined : Number(payeeAmount);
     if (!draft && (!amt || amt <= 0)) { toast.error('Enter the payment amount'); return; }
     setBusy(true);
     try {
       const { data } = await api.post('/manual-pay/first-scan', {
-        payee_upi: upi, payee_name: payeeName.trim() || null,
         merchant_amount: amt,
         expense_draft: draft || undefined,
       });
       localStorage.setItem(TXN_KEY, data.transaction_id);
       setTxn(data);
-      toast.success(`Payee locked: ${data.payee_name || data.payee_upi}`);
     } catch (e) { toast.error(e.response?.data?.detail || 'Could not start payment'); }
-    finally { setBusy(false); }
-  };
-
-  const confirm = async (completed) => {
-    setBusy(true);
-    try { const { data } = await api.post(`/manual-pay/${txn.transaction_id}/confirm`, { completed }); setTxn(data); }
-    catch (e) { toast.error(e.response?.data?.detail || 'Failed'); }
     finally { setBusy(false); }
   };
 
@@ -276,7 +268,7 @@ export default function PayNow() {
     setTxn(null); setDraft(null); setDiscardOpen(false);
     setBusy(false);
     toast.success('Bill discarded');
-    nav('/app/capture');
+    nav('/app/categories');
   };
 
   const cancel = async () => {
@@ -320,7 +312,7 @@ export default function PayNow() {
         )}
       </div>
 
-      {/* STEP 1 — bill summary + payee details (no QR scan, no manual refs) */}
+      {/* STEP 1 — bill summary → direct receipt upload (no payee questions, no QR) */}
       {!txn && (
         <>
           <div className="rounded-xl border p-4 bg-muted/30" data-testid="bill-summary">
@@ -328,74 +320,26 @@ export default function PayNow() {
             <div className="text-3xl font-bold font-mono">{money(draftAmount)}</div>
             {draft?.category && <div className="text-sm text-muted-foreground mt-1">{draft.category}{draft.sub_category ? ` · ${draft.sub_category}` : ''}</div>}
           </div>
-          <div className="rounded-xl border p-4 space-y-3" data-testid="payee-form">
-            <div>
-              <h2 className="text-xl font-semibold">Who are you paying?</h2>
-              <p className="text-sm text-muted-foreground mt-1">Pay the merchant in any UPI app, then upload the payment receipt here — we verify it automatically.</p>
+          {!draft && (
+            <div className="rounded-xl border p-4" data-testid="amount-form">
+              <label className="text-sm font-medium">Amount (₹)</label>
+              <Input value={payeeAmount} onChange={(e) => setPayeeAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="0.00" className="font-mono mt-1" data-testid="payee-amount-input" />
             </div>
-            <div>
-              <label className="text-sm font-medium">Merchant / payee name (optional)</label>
-              <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="e.g. Sharma Tea Stall" data-testid="payee-name-input" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Merchant UPI ID</label>
-              <Input value={payeeUpi} onChange={(e) => setPayeeUpi(e.target.value)} placeholder="name@bank" className="font-mono" data-testid="payee-upi-input" />
-            </div>
-            {!draft && (
-              <div>
-                <label className="text-sm font-medium">Amount (₹)</label>
-                <Input value={payeeAmount} onChange={(e) => setPayeeAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="0.00" className="font-mono" data-testid="payee-amount-input" />
-              </div>
-            )}
-            <Button className="w-full" disabled={busy} onClick={startPayment} data-testid="start-payment-btn">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
-            </Button>
-          </div>
+          )}
+          <Button className="w-full" disabled={busy} onClick={startPayment} data-testid="start-payment-btn">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Upload Payment Receipt'}
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">Pay the merchant in any UPI app, then upload the payment receipt — amount, UTR and payee are read automatically.</p>
         </>
       )}
 
-      {/* STEP 2 — pay the merchant in your own UPI app */}
-      {st === 'awaiting_merchant_payment' && (
-        <div className="space-y-4" data-testid="ready-to-pay">
-          <div className="rounded-xl border p-4">
-            <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium"><ShieldCheck className="h-4 w-4" /> Payee locked</div>
-            <div className="mt-3 text-sm text-muted-foreground">Merchant</div>
-            <div className="text-lg font-semibold" data-testid="rtp-merchant">{txn.payee_name || 'UPI Payee'}</div>
-            <div className="text-sm font-mono">{txn.payee_upi}</div>
-            <div className="mt-3 text-sm text-muted-foreground">Bill amount</div>
-            <div className="text-2xl font-bold font-mono" data-testid="rtp-amount">{money(txn.merchant_amount)}</div>
-          </div>
-          <div className="rounded-xl border p-4 text-sm space-y-1 bg-muted/30">
-            <p className="font-medium">Now pay this merchant using your preferred UPI app:</p>
-            <ol className="list-decimal ml-5 text-muted-foreground space-y-0.5">
-              <li>Open Google Pay, PhonePe, Paytm, BHIM or your bank app.</li>
-              <li>Pay to the UPI ID above.</li>
-              <li>Pay exactly {money(txn.merchant_amount)}.</li>
-              <li>Return to Bill4Pe and upload the payment receipt.</li>
-            </ol>
-          </div>
-          <Button variant="outline" className="w-full" data-testid="copy-upi-btn" onClick={() => { navigator.clipboard?.writeText(txn.payee_upi); toast.success('UPI ID copied'); }}>
-            <Copy className="h-4 w-4 mr-1" /> Copy UPI ID
-          </Button>
-          <div className="rounded-xl border p-4">
-            <p className="font-medium text-center">Did you complete the payment?</p>
-            <div className="flex gap-2 mt-3">
-              <Button className="flex-1" disabled={busy} onClick={() => confirm(true)} data-testid="payment-done-btn">Yes, payment done</Button>
-              <Button variant="outline" className="flex-1" disabled={busy} onClick={() => toast.message('No problem — pay the merchant, then tap "Yes, payment done".')} data-testid="not-yet-btn">Not yet</Button>
-            </div>
-            <button className="w-full text-xs text-muted-foreground mt-3" onClick={cancel} data-testid="cancel-session-btn">Cancel payment session</button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3 — receipt upload (no manual UTR entry) */}
-      {st === 'merchant_payment_claimed' && (
+      {/* STEP 2 — receipt upload directly (no confirm screen, no manual UTR) */}
+      {(st === 'awaiting_merchant_payment' || st === 'merchant_payment_claimed') && (
         <div className="space-y-4" data-testid="proof-screen">
           <h2 className="text-xl font-semibold">Verify your payment</h2>
           <div className="rounded-xl border p-4 text-sm bg-muted/30">
-            <div>Paid to <b>{txn.payee_name || txn.payee_upi}</b></div>
-            <div className="font-mono text-muted-foreground">{txn.payee_upi}</div>
-            <div className="mt-1">Amount <b>{money(txn.merchant_amount)}</b></div>
+            <div>Bill amount <b>{money(txn.merchant_amount)}</b></div>
+            <p className="text-xs text-muted-foreground mt-1">Pay exactly this amount to the merchant in any UPI app, then upload the receipt below.</p>
           </div>
           {uploadBox}
           <p className="text-xs text-muted-foreground text-center">

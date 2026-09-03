@@ -31,7 +31,7 @@ def _is_admin(user) -> bool:
 
 
 class FirstScanReq(BaseModel):
-    payee_upi: str
+    payee_upi: Optional[str] = None
     payee_name: Optional[str] = None
     merchant_amount: Optional[float] = None
     expense_draft: Optional[dict] = None

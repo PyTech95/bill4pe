@@ -42,6 +42,17 @@ verifies it, and generates a GST-style bill. Revenue = configurable per-bill fee
 - Verified via live curl suite T1–T7 (clean/mismatch/failed/wrong-payee/duplicate/
   manual-UTR-422/generate-gating) — all pass; Gemini reads PhonePe/Paytm/GPay formats.
 
+## Implemented (2026-09-03, latest) — Receipt-first pre-verification flow
+Flow is now: Add Items → Pay Now → DIRECT receipt upload → auto OCR → verify
+(amount match + success status + duplicate UTR) → existing fee/generate process
+unchanged. Removed: "Who are you paying?" screen, merchant-QR remnants, manual
+payee name/UPI entry, and the "Did you complete the payment?" confirm screen.
+Payee is captured from receipt OCR — submit_proof backfills payee snapshots so
+bill generation is untouched. Backend: FirstScanReq.payee_upi optional;
+submit_proof accepts 'awaiting_payment' directly. PayNow: RESUMABLE includes
+awaiting_merchant_payment (refresh mid-upload resumes correctly); discard navs
+to /app/categories. Verified: pytest 9/9 + Playwright 100% (iteration_4.json).
+
 ## Backlog
 - P0: production deploy (user confirmed-free deployment pending), Razorpay keys → live fee
 - P1: email delivery (Resend), superadmin review queue UI for review_required receipts

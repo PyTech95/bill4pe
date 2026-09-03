@@ -138,8 +138,11 @@ def _public_verification(v):
 
 # ---------------- 1) FIRST QR SCAN → freeze merchant + amount ----------------
 async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, expense_draft=None):
+    # Payee is NOT collected upfront anymore — it is captured from the uploaded
+    # payment receipt OCR. An explicitly supplied UPI (legacy clients) is still
+    # validated when present.
     upi = normalize_upi(payee_upi)
-    if not upi or "@" not in upi or len(upi) < 3:
+    if upi and ("@" not in upi or len(upi) < 3):
         raise ValueError("A valid merchant UPI/VPA is required (name@bank)")
 
     # Authoritative amount: prefer draft items, else supplied merchant_amount.
@@ -184,7 +187,7 @@ async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, exp
         "state": S_AWAITING_MERCHANT_PAYMENT,
         # frozen merchant snapshot (immutable after this)
         "payee_name_snapshot": (payee_name or "").strip() or None,
-        "payee_upi_snapshot": upi,
+        "payee_upi_snapshot": upi or None,
         "merchant_amount_paise": merchant_amount_paise,
         "first_qr_verified": True,
         "first_qr_payload_hash": None,
@@ -371,8 +374,8 @@ async def submit_proof(user, tid, proof_file=None, image_bytes=None, mime=None):
     # Freeze the proof once the fee is paid / receipt is generated (spec §40).
     if txn.get("fee_status") == "paid" or txn.get("bill_status") == "generated":
         raise ValueError("Proof is locked — the receipt has already been generated")
-    if txn.get("merchant_payment_status") not in ("user_confirmed", "proof_submitted", "partial_reference"):
-        raise ValueError("Confirm the merchant payment before submitting proof")
+    if txn.get("merchant_payment_status") not in ("awaiting_payment", "user_confirmed", "proof_submitted", "partial_reference"):
+        raise ValueError("This payment session cannot accept a receipt")
     if not proof_file or not image_bytes:
         raise ValueError("Upload a payment receipt screenshot")
 
@@ -395,6 +398,12 @@ async def submit_proof(user, tid, proof_file=None, image_bytes=None, mime=None):
         "verification": rec,
         "updated_at": now_iso(),
     }
+    # Payee is captured FROM THE RECEIPT (no manual entry): backfill the frozen
+    # merchant snapshot so downstream bill generation stays unchanged.
+    if not txn.get("payee_upi_snapshot") and rec.get("payee_upi"):
+        patch["payee_upi_snapshot"] = rec["payee_upi"]
+    if not txn.get("payee_name_snapshot") and rec.get("payee_name"):
+        patch["payee_name_snapshot"] = rec["payee_name"]
     if verified:
         patch["fee_status"] = "due"
     updated = await db.manual_transactions.find_one_and_update(
