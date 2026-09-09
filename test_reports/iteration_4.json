@@ -1,0 +1,35 @@
+{
+  "summary": "Iter-29 receipt-first payment simplification fully validated. Backend pytest 9/9 PASSED (test_iter29_receipt_first.py): (1) POST /api/manual-pay/first-scan with ONLY {merchant_amount:10} (no payee_upi) → 200, state=awaiting_merchant_payment, payee_upi null; (2) zero amount → 400; (3) invalid UPI when supplied → 400 (legacy validation still intact); (4) DIRECT proof upload without prior /confirm → 200, verification_status='verified', payee_name/payee_upi backfilled from OCR on the txn public projection, GET returns verification.payee_name; (5) proof without file → 422; (6) duplicate UTR on a different txn → verification_status='rejected' + duplicate_check='duplicate'; (7) discard verified txn → 400; (8-9) wallet/expenses/login endpoints unaffected. Frontend Playwright (real Gemini OCR, public URL, /app/pay): ACCEPTANCE — fresh @bill4pe.in user → /app/pay renders bill-summary + payee-amount-input + start-payment-btn ONLY; ALL forbidden testids absent (payee-name-input, payee-upi-input, payment-done-btn, copy-upi-btn, not-yet-btn, cancel-session-btn, ready-to-pay); no 'Who are you paying?' text, no 'Did you complete the payment?' text; entering ₹10 + click start-payment-btn IMMEDIATELY shows proof-screen with receipt-upload-input (no intermediate confirm step); uploading synthetic PIL ₹10 receipt → verification-final-status='PAYMENT VERIFIED', Receiver row shows 'Tea Stall' captured from OCR, 'Receiver Match' row NOT rendered (expected — no expected payee anymore), UTR read-only, generate-receipt-btn appears (old post-verification process intact). MISMATCH — fresh ₹20 bill + ₹10 receipt → PAYMENT NOT VERIFIED + reupload-box + start-new-payment + discard-bill-btn all present. REFRESH-MID-FLOW REGRESSION — after restart (state=awaiting_merchant_payment) reload of /app/pay RESUMES to proof-screen with bill amount ₹20 preserved (this iter's key change — awaiting_merchant_payment is now in RESUMABLE). DISCARD REGRESSION — discard-bill-btn opens discard-confirm-modal, discard-confirm-btn clears localStorage.bill4pe_manual_txn and shows 'Bill discarded' toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PayNow post-discard", "issues": ["After discard-confirm-btn, nav('/app/capture') visibly ends on the landing page ('/') with sign-in buttons. Storage is cleared correctly and toast shows 'Bill discarded', so this is cosmetic redirect chain (likely /app/capture redirects to landing when sessionStorage.bill4pe_draft is empty). Iter-28 report claimed final URL /app/capture — worth a quick check whether /app/capture route now bounces to '/' without an in-progress draft."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter29_receipt_first.py",
+    "/app/test_reports/pytest/iter29_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: verify /app/capture landing behaviour post-discard — after discard, user lands on '/' (landing) rather than /app/capture. Not blocking (storage cleared, toast shown), but user-perception nit vs. iter-28 baseline."
+  ],
+  "critical_code_review_comments": [
+    "PayNow.jsx step-2 renders proof-screen for BOTH 'awaiting_merchant_payment' AND 'merchant_payment_claimed'. Since the new flow never sets 'merchant_payment_claimed' (no /confirm call), the second condition is dead code but harmless — recommend simplifying to a single-state check to avoid confusion.",
+    "manual_flow_service.first_scan still accepts payee_upi (Optional) and validates format when present. Good for legacy compatibility, but the frontend never sends it now — consider removing FirstScanReq.payee_upi and payee_name entirely in a follow-up cleanup to reduce API surface (rename `first-scan` to `start-payment` at a suitable major version).",
+    "submit_proof backfills payee_upi_snapshot/payee_name_snapshot from OCR ONLY when they are None. Correct for the new flow; however, if legacy callers pass payee_upi to first-scan the OCR-derived value is ignored even when they disagree. Consider logging a mismatch warning for support triage.",
+    "PayNow.jsx line 17 RESUMABLE array is now module-scope — good (fixes the iter-28 eslint nit).",
+    "The 'Amount Match' row in VerificationCard uses ok=v.amount_matched which is boolean — verified receipts show a green checkmark. But when verification fails specifically on receiver-match (rare in new flow with no expected payee), receiver_matched === null suppresses the row entirely — correct per spec."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter29_receipt_first.py"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (acceptance + mismatch + refresh-resume + discard)"},
+  "test_credentials": "Super admin (login sanity only): meland@mhem.in / Bill4pe@123. Fresh users registered per run: iter29_<ts>@bill4pe.in / Test@1234.",
+  "seed_data_creation": "One @bill4pe.in user per test class (token cached); real Gemini OCR + real receipt_verifications rows via unique 12-digit UTRs (partial unique index on verified-only avoids collisions).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Payment flow is now receipt-first: /app/pay step-1 = bill-summary + start-payment-btn only (no payee questions). Clicking start-payment-btn calls /manual-pay/first-scan with only merchant_amount and jumps STRAIGHT to proof-screen (receipt-upload-input, visually hidden — use set_input_files). No confirm step, no copy-upi, no manual UTR entry. Payee is backfilled from OCR by submit_proof. RESUMABLE now includes 'awaiting_merchant_payment' so refreshing mid-upload re-opens the upload screen with the correct bill amount. Discard flow unchanged: discard-bill-btn → discard-confirm-modal → discard-confirm-btn clears bill4pe_manual_txn + bill4pe_draft and old tid returns 404. Test file /app/backend/tests/test_iter29_receipt_first.py — run with REACT_APP_BACKEND_URL=... pytest ... -o addopts='' (pytest.ini enables xdist).",
+  "rca of the issue": "N/A — all iter-29 acceptance behaviours observed correctly; no regressions vs iter-28."
+}

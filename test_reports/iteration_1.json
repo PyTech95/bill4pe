@@ -1,0 +1,30 @@
+{
+  "summary": "Full-stack testing of bill4pe. Backend: 16/16 pytest tests passed (auth incl. lockout/refresh/logout, register validation, settings persistence, customer CRUD, invoice GST math intra/inter-state, draft->send, partial+full payment, duplicate reference 409, dashboard stats). Frontend (Playwright on public URL): login redirect, wrong-password error alert, admin login -> dashboard with all 4 KPIs + revenue chart + recent invoices + top customers, settings save+persist after reload, customer add, invoice builder (2 line items 10x500@5% + 1x2000@18% => grand total ₹7,610.00 shown live, inter-state toggle keeps total 7610 with IGST, UPI QR preview visible), Save & Send creates invoice and navigates to detail (INV-0002), invoice detail shows UPI QR + total, partial payment reduces balance ₹6,610.00, duplicate txn reference correctly rejected (409), full payment flips balance to ₹0.00, invoices list + search + status tabs work, logout redirects to /login. Overdue seeded invoice (INV-0001 Sharma Textiles, due 2026-06-15) correctly shows Overdue badge and matches Overdue KPI ₹5,610.00.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Recharts logs width(-1)/height(-1) warning during initial render; chart still renders correctly after container settles. Consider setting explicit min height on ResponsiveContainer parent."]},
+      {"screen": "InvoiceBuilder GST select", "issues": ["React dev-time hydration warning: <span> inside <option> (from Emergent preview instrumentation wrappers on GST_SLABS.map). Cosmetic/dev-only, does not affect prod. No user impact."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is a single ~630-line module; recommend splitting into routers (auth/settings/customers/invoices/dashboard) and models modules for maintainability as feature-set grows.",
+    "eff_status uses today = utcnow().date().isoformat() with string comparison against due_date - works because both are ISO-8601 YYYY-MM-DD strings, but could break if due_date ever stored as datetime. Consider normalizing on write.",
+    "compute_totals splits tax as half/tax-half which can leave 1p rounding on the SGST side (e.g., 305/305 OK here, but on 5.03 tax you'd get 2.51/2.52). Acceptable for GST rounding rules.",
+    "Login lockout uses request.client.host+email as key; behind a proxy/ingress this may not be the real client IP. Consider trusting X-Forwarded-For when appropriate.",
+    "get_current_user reads Bearer token from Authorization header as fallback but /auth/logout does not require auth - fine, but /auth/refresh accepts refresh cookie only; acceptable.",
+    "Frontend charts container: give explicit height to avoid recharts width(-1) warning on first paint."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (all listed flows verified)"},
+  "test_credentials": "Admin: meland@mhem.in / Bill4pe@123 (verified working). Registrations via /register endpoint also verified.",
+  "seed_data_creation": "Registered ephemeral user test_<uuid>@bill4pe.test for isolation in pytest. Created 'TESTCust_<ts>' customer and invoice INV-0002 (₹7,610.00, fully paid) under admin during UI test - safe to keep or clean up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend and frontend both fully functional. System clock in test env appears to be Sep 2026 - keep future due_dates >= 2027 or well after current date when writing new tests. Auth uses httpOnly cookies with samesite=none, secure=true; requests.Session works fine over HTTPS public URL. Duplicate payment reference returns 409 as spec. All data-testid selectors from design_guidelines.json + component code are consistent and reliable.",
+  "rca of the issue": "N/A - no bugs identified."
+}

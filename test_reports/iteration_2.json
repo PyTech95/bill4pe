@@ -1,0 +1,30 @@
+{
+  "summary": "Iter-27 receipt-verify overhaul validated end-to-end. Backend: 7/7 pytest passed (auth, POST /manual-pay/{tid}/proof requires file → 422, sending only utr_full form field → 422, bad content-type → 400, full OCR happy path via real Gemini → verified with extracted_amount/UTR/txn_id/payee_upi/provider, amount mismatch 5 vs 150 → rejected + /generate 400, duplicate UTR + duplicate transaction_id both rejected). Frontend (Playwright, public URL, real Gemini OCR): Landing shows updated copy 'Pay via UPI' + 'Receipt auto-verified' with NO 'scan merchant QR' text and 0 console errors. /app/pay has NO legacy testids (qr-scanner/utr-full-input/utr-last4-input/manual-upi-input all absent) and shows the new payee form (payee-name-input, payee-upi-input, payee-amount-input, start-payment-btn). Full happy UI flow: enter sharma2@okhdfcbank + Rs.75 → Continue → Yes payment done → upload synthetic PhonePe PIL screenshot → within ~15s VerificationCard appears with all rows read-only, extracted amount ₹75.00 (Matched), Receiver Match Matched, UTR/Txn read, PhonePe detected, Duplicate Check 'New Transaction', final banner 'PAYMENT VERIFIED', generate-receipt-btn visible. Regression: /login works (login-email-input/login-password-input/login-submit-btn), /app/dashboard, /app/wallet, /app/reports and /app/capture all load without errors after auth.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter27_receipt_verify.py",
+    "/app/test_reports/pytest/iter27_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "receipt_verify.verify_receipt: verification is persisted for EVERY upload including rejected ones (delete_many-then-insert). That is correct for auditability but the unique partial index on extracted_utr + extracted_transaction_id will therefore make a legitimate re-upload of the SAME receipt for the SAME bill always land in the delete-then-insert path — fine. But if a user is unlucky enough that OCR briefly extracts a UTR belonging to a different past receipt (mis-read digits), the txn is permanently locked out with 'already been used' because the reject record cements the block. Consider only persisting extracted_utr/extracted_transaction_id when verification_status == 'verified' (or explicitly excluding them from the unique index on rejected records via a partialFilterExpression on verification_status).",
+    "manual_flow_service.submit_proof pipes ValueError from receipt_verify (e.g. 'Receipt verification is unavailable (AI key not configured)') back as 400. Good — but the FastAPI route returns generic 'Only JPG, PNG or WEBP screenshots are allowed' for a text/plain content-type. Consider allowing content-type 'application/octet-stream' with a proper extension check for CLI/curl clients.",
+    "PayNow.jsx: uploadBox appears both in step 3 (merchant_payment_claimed) and step 4 (proof_submitted with reupload-box). The file input has data-testid but is visually hidden — Playwright must use state='attached' to interact with it. Not a bug, but adding an aria-label or moving the accessible name onto the enclosing label would improve accessibility.",
+    "Verification card: rows are read-only text nodes (correct), but there is no explicit note to the user that OCR values cannot be edited — a subtle 'Auto-extracted from receipt · not editable' hint would set the right expectation.",
+    "receipt_verify.DUP_MSG failure reason uses 'This payment reference has already been used' — consider surfacing WHICH field collided (utr vs transaction_id) in the failure_reasons array for support triage.",
+    "Frontend: after a successful verification the user must still click 'Generate' (individual). If they close the tab, the resumable state ('proof_submitted') is picked up by PayNow.jsx correctly — good. No issue found."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter27_receipt_verify.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (all requested UI flows verified)"},
+  "test_credentials": "Admin (superadmin console): meland@mhem.in / Bill4pe@123. Regular UI test user registered on-the-fly (uitest_<ts>@bill4pe.in / Test@1234).",
+  "seed_data_creation": "Test runs register temporary users under @bill4pe.in and create manual_transactions + receipt_verifications records. Rate limit on /api/auth/register is ~1/4s; the test file caches the first-registered token to avoid 429s.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The public URL /api/auth/register REJECTS emails whose domain ends with .test/.example etc — use @bill4pe.in for synthetic users. Rate limit on /api/auth/register is aggressive (~429 within a few seconds). Registering meland@mhem.in through /login redirects to /superadmin (super admin console) not /app — regular users go to /app. Backend receipt_verifications collection enforces unique extracted_utr AND extracted_transaction_id partial indexes; hardcoding either across tests will produce duplicate-rejects on the 2nd run. In synthetic PIL receipts, keep both UTR and Transaction ID unique (the test uses time-based digits). Real Gemini OCR call typically returns within 6–20s from staging.",
+  "rca of the issue": "N/A — all requested behaviors observed correctly; no regressions."
+}

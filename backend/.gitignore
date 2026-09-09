@@ -1,0 +1,11 @@
+
+.env
+.env.*
+backend/.env
+frontend/.env
+backend/private_uploads/
+private_uploads/
+node_modules/
+venv/
+.venv/
+__pycache__/
