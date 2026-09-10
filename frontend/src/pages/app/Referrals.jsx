@@ -6,6 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { publicWebUrl } from '@/lib/urls';
 
 export default function Referrals() {
   const [data, setData] = useState({ code: '', total_referrals: 0, total_earnings: 0, referrals: [], bonus_per_referral: 50 });
@@ -15,8 +16,8 @@ export default function Referrals() {
     api.get('/referrals/me').then((r) => setData(r.data)).catch(() => {});
   }, []);
 
-  const inviteLink = () => `${window.location.origin}/register?ref=${data.code}`;
-  const phoneInviteLink = () => `${window.location.origin}/login/phone?ref=${data.code}`;
+  const inviteLink = () => publicWebUrl(`/register?ref=${data.code}`);
+  const phoneInviteLink = () => publicWebUrl(`/login/phone?ref=${data.code}`);
 
   const message = () =>
     `Hey! I'm using BILL4PE — an AI-powered expense and reimbursement app. ` +

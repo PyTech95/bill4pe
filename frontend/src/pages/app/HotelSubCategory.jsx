@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { catByKey } from '@/lib/categories';
 import api from '@/lib/api';
+import { getCurrentGeo } from '@/lib/native';
 
 const HOTEL_NATURE = {
   'Standard Room': 'Hotel & Lodging',
@@ -65,17 +66,11 @@ export default function HotelSubCategory() {
   const recChunksRef = useRef([]);
   const recStreamRef = useRef(null);
 
-  const captureLocation = () => {
-    if (!navigator.geolocation) { setGeo({ lat: null, lng: null, status: 'unsupported' }); return; }
+  const captureLocation = async () => {
     setGeo((g) => ({ ...g, status: 'loading' }));
-    navigator.geolocation.getCurrentPosition(
-      (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude, status: 'ok' }),
-      (err) => {
-        const denied = err && err.code === 1;
-        setGeo({ lat: null, lng: null, status: denied ? 'denied' : 'error' });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-    );
+    const p = await getCurrentGeo({ timeout: 10000, maximumAge: 30000 });
+    if (p) setGeo({ lat: p.lat, lng: p.lng, status: 'ok' });
+    else setGeo({ lat: null, lng: null, status: 'denied' });
   };
 
   useEffect(() => { captureLocation(); /* eslint-disable-next-line */ }, []);

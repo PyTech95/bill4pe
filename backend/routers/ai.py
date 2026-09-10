@@ -1,9 +1,8 @@
 """AI endpoints: image item detection, autocomplete suggestions, receipt OCR, voice expense.
 
-All AI features use Google Gemini via GEMINI_API_KEY (google-genai on the VPS, or
-the Emergent proxy as a preview-only fallback). Voice notes are transcribed by
-Gemini's native audio understanding, then parsed by Gemini text. No OpenAI /
-Whisper dependency.
+All AI features use Google Gemini via GEMINI_API_KEY (google-genai on the VPS).
+Voice notes are transcribed by Gemini's native audio understanding, then parsed
+by Gemini text. No Emergent/OpenAI/Whisper dependency is required.
 """
 import json
 import os
@@ -11,8 +10,8 @@ import asyncio
 import tempfile
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from PIL import Image
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from PIL import Image, ImageOps
 
 from core.config import logger
 from core.config import GEMINI_UTR_MODEL
@@ -29,6 +28,8 @@ from services.prompts import (
     UTR_EXTRACT_PROMPT,
     VALID_CATEGORIES,
     VOICE_AUDIO_PROMPT,
+    VOICE_PARSE_PROMPT,
+    PRODUCT_FALLBACK_PROMPT,
     category_prompt,
 )
 
@@ -59,6 +60,129 @@ def _normalise_mime(file: UploadFile) -> tuple[str, str]:
     return mime, suffix
 
 
+
+
+def _prepare_image(raw: bytes, max_side: int = 1600) -> tuple[bytes, str]:
+    """Normalize phone photos before Gemini: fix EXIF rotation and cap size."""
+    try:
+        im = ImageOps.exif_transpose(Image.open(BytesIO(raw))).convert("RGB")
+        im.thumbnail((max_side, max_side))
+        buf = BytesIO()
+        im.save(buf, format="JPEG", quality=88, optimize=True)
+        return buf.getvalue(), "image/jpeg"
+    except Exception:
+        return raw, "image/jpeg"
+
+
+def _clean_items(payload) -> list[dict]:
+    if isinstance(payload, dict):
+        payload = payload.get("items") or []
+    if not isinstance(payload, list):
+        return []
+    cleaned = []
+    for it in payload:
+        if not isinstance(it, dict):
+            continue
+        name = str(it.get("name", "")).strip()
+        if not name:
+            continue
+        try:
+            qty = float(it.get("quantity", 1) or 1)
+            price = float(it.get("unit_price", 0) or 0)
+        except Exception:
+            qty, price = 1.0, 0.0
+        if qty <= 0:
+            qty = 1.0
+        if price < 0:
+            price = 0.0
+        cleaned.append({"name": name[:120], "quantity": qty, "unit_price": round(price, 2)})
+    return cleaned[:20]
+
+
+def _parse_items_reply(reply: str) -> list[dict]:
+    txt = _strip_code_fence(reply)
+    candidates = []
+    if "[" in txt and "]" in txt:
+        candidates.append(_extract_json_block(txt, "[", "]"))
+    if "{" in txt and "}" in txt:
+        candidates.append(_extract_json_block(txt, "{", "}"))
+    candidates.append(txt)
+    for c in candidates:
+        try:
+            items = _clean_items(json.loads(c))
+            if items:
+                return items
+        except Exception:
+            pass
+    return []
+
+
+def _normalise_voice_payload(parsed: dict, transcript_hint: str = "") -> dict:
+    parsed = parsed if isinstance(parsed, dict) else {}
+    transcript = str(parsed.get("transcript") or transcript_hint or "").strip()
+    category = str(parsed.get("category", "other")).lower().strip()
+    if category not in VALID_CATEGORIES:
+        category = "other"
+    sub_category = str(parsed.get("sub_category", "Misc")).strip() or "Misc"
+    merchant_name = str(parsed.get("merchant_name", "")).strip()
+    try:
+        total_amount = float(parsed.get("total_amount", 0) or 0)
+    except Exception:
+        total_amount = 0.0
+    items = _clean_items(parsed.get("items") or [])
+    if not items and total_amount > 0:
+        items = [{"name": sub_category or "Expense", "quantity": 1.0, "unit_price": round(total_amount, 2)}]
+    return {
+        "transcript": transcript, "category": category, "sub_category": sub_category,
+        "merchant_name": merchant_name, "total_amount": round(total_amount, 2), "items": items,
+    }
+
+
+def _basic_voice_fallback(transcript: str) -> dict:
+    """Small deterministic fallback so browser speech text is never discarded."""
+    import re
+    t = (transcript or "").strip()
+    low = t.lower()
+    category, sub = "other", "Misc"
+    rules = [
+        (("lunch", "dinner", "breakfast", "food", "khana", "chai", "tea", "coffee"), "food", "Food"),
+        (("cab", "uber", "ola", "taxi", "auto", "metro", "train", "flight", "travel"), "travel", "Travel"),
+        (("hotel", "room", "stay"), "hotel", "Hotel"),
+        (("pen", "paper", "notebook", "stationery"), "stationery", "Stationery"),
+        (("grocery", "atta", "dal", "rice", "sabzi"), "grocery", "Grocery"),
+    ]
+    for words, cat, label in rules:
+        if any(w in low for w in words):
+            category, sub = cat, label
+            break
+    nums = re.findall(r"(?<!\w)(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d{1,2})?)(?!\w)", low)
+    amount = float(nums[-1]) if nums else 0.0
+    return _normalise_voice_payload({
+        "transcript": t, "category": category, "sub_category": sub,
+        "merchant_name": "", "total_amount": amount,
+        "items": ([{"name": sub, "quantity": 1, "unit_price": amount}] if amount > 0 else []),
+    }, t)
+
+
+async def _parse_voice_text(transcript: str) -> dict:
+    transcript = (transcript or "").strip()
+    if not transcript:
+        return _basic_voice_fallback("")
+    if has_gemini():
+        try:
+            reply = await gemini_text(
+                system_prompt=VOICE_PARSE_PROMPT,
+                user_text=f"Transcript: {transcript}\nReturn strict JSON only.",
+            )
+            txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
+            parsed = json.loads(txt)
+            out = _normalise_voice_payload(parsed, transcript)
+            if out["transcript"] or out["items"] or out["total_amount"] > 0:
+                return out
+        except Exception:
+            logger.exception("Voice text fallback parsing failed")
+    return _basic_voice_fallback(transcript)
+
 def _ai_error(exc: Exception, fallback_msg: str) -> HTTPException:
     """Map a Gemini exception to a clean, non-leaky HTTPException."""
     msg = str(exc).lower()
@@ -76,41 +200,37 @@ async def detect_items(category: str = "food", file: UploadFile = File(...), use
     if not has_gemini():
         raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
     raw = await file.read()
-    if len(raw) > 8 * 1024 * 1024:
-        raise HTTPException(400, "Image too large (max 8MB)")
-    mime, _suffix = _normalise_mime(file)
+    if not raw:
+        raise HTTPException(400, "Empty image")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (max 10MB)")
+    raw, mime = _prepare_image(raw, 1600)
     try:
         prompt = category_prompt(category)
         reply = await gemini_vision(
             system_prompt=prompt,
-            user_text=f"Detect all {category} items in this image. Return strict JSON array only.",
-            image_bytes=raw,
-            mime=mime,
+            user_text=(
+                f"Identify every visible {category} product/item. Product identification is required even "
+                "when price is not visible; use unit_price 0 if necessary. Return strict JSON only."
+            ),
+            image_bytes=raw, mime=mime,
         )
-        txt = _extract_json_block(_strip_code_fence(reply), "[", "]")
-        try:
-            items = json.loads(txt)
-        except Exception:
-            items = []
-        cleaned = []
-        for it in items if isinstance(items, list) else []:
-            if not isinstance(it, dict):
-                continue
-            name = str(it.get("name", "")).strip()
-            if not name:
-                continue
-            try:
-                qty = float(it.get("quantity", 1) or 1)
-                price = float(it.get("unit_price", 0) or 0)
-            except Exception:
-                qty, price = 1.0, 0.0
-            cleaned.append({"name": name, "quantity": qty, "unit_price": round(price, 2)})
-        return {"items": cleaned}
+        cleaned = _parse_items_reply(reply)
+        fallback_used = False
+        if not cleaned:
+            fallback_used = True
+            second = await gemini_vision(
+                system_prompt=PRODUCT_FALLBACK_PROMPT,
+                user_text="Inspect this image again as a general product recognizer. Return strict JSON only.",
+                image_bytes=raw, mime=mime,
+            )
+            cleaned = _parse_items_reply(second)
+        return {"items": cleaned, "identified": bool(cleaned), "fallback_used": fallback_used}
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("AI detection failed")
-        raise _ai_error(e, "AI detection failed")
+        raise _ai_error(e, "Product identification failed. Please try a clearer photo.")
 
 
 @router.post("/ai/suggest-items")
@@ -206,7 +326,7 @@ async def extract_utr(file: UploadFile = File(...), user=Depends(get_current_use
     """Read a UPI payment screenshot and auto-extract the 12-digit UTR.
 
     Degrades gracefully: on AI timeout/overload it returns found=false (the client
-    then asks the user to type the UTR) instead of hanging past the gateway limit.
+    asks the user to upload a clearer receipt) instead of hanging past the gateway limit.
     """
     if not has_gemini():
         raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
@@ -240,10 +360,10 @@ async def extract_utr(file: UploadFile = File(...), user=Depends(get_current_use
         )
     except asyncio.TimeoutError:
         logger.warning("UTR extraction timed out")
-        return {"utr": "", "found": False, "error": "AI is busy — please type the 12-digit UTR."}
+        return {"utr": "", "found": False, "error": "AI is busy — please upload the receipt again in a moment."}
     except Exception as e:
         logger.exception("UTR extraction failed")
-        return {"utr": "", "found": False, "error": "Couldn't read the UTR — please type it."}
+        return {"utr": "", "found": False, "error": "Couldn't read the payment reference — please upload a clearer full receipt."}
     txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
     try:
         parsed = json.loads(txt)
@@ -255,20 +375,35 @@ async def extract_utr(file: UploadFile = File(...), user=Depends(get_current_use
     return {"utr": "", "found": False}
 
 
+@router.post("/voice/expense-text")
+async def voice_expense_text(payload: dict, user=Depends(get_current_user)):
+    """Parse browser speech-to-text into the same structured expense draft."""
+    transcript = str((payload or {}).get("transcript", "")).strip()
+    if not transcript:
+        raise HTTPException(422, "No speech text was captured. Please speak again.")
+    out = await _parse_voice_text(transcript)
+    if not out["transcript"] and not out["items"] and out["total_amount"] == 0:
+        raise HTTPException(422, "Could not understand the speech. Please speak the item and amount clearly.")
+    return out
+
+
 @router.post("/voice/expense")
-async def voice_expense(file: UploadFile = File(...), user=Depends(get_current_user)):
-    """Audio → Gemini transcribe → Gemini text parse → structured draft expense.
+async def voice_expense(
+    file: UploadFile = File(...),
+    transcript_hint: str = Form(""),
+    user=Depends(get_current_user),
+):
+    """Audio + browser transcript hint -> resilient structured expense draft.
 
-    Flow:
-        Audio Recording -> FastAPI Upload -> Gemini Audio Transcription
-        -> Gemini Text Parsing -> Structured Expense Draft
-
-    Same request/response contract as before so the existing UI auto-fill keeps working.
+    The browser transcript is a fallback, not a replacement: Gemini audio remains
+    authoritative when it succeeds, but a device/browser transcription is never lost
+    if audio transcoding or AI audio processing fails.
     """
-    if not has_gemini():
-        raise HTTPException(500, "AI key not configured (GEMINI_API_KEY)")
     raw = await file.read()
+    hint = (transcript_hint or "").strip()
     if not raw:
+        if hint:
+            return await _parse_voice_text(hint)
         raise HTTPException(400, "Empty audio file")
     if len(raw) > 25 * 1024 * 1024:
         raise HTTPException(400, "Audio too large (max 25MB)")
@@ -287,81 +422,50 @@ async def voice_expense(file: UploadFile = File(...), user=Depends(get_current_u
     else:
         suffix = ".webm"
 
-    # Transcode to Gemini-friendly MP3 (handles browser webm/opus).
     try:
         mp3 = to_mp3(raw, suffix)
     except Exception:
+        if hint:
+            logger.warning("Audio transcode failed; using browser transcript fallback")
+            return await _parse_voice_text(hint)
         raise HTTPException(400, "Unsupported or corrupted audio. Please re-record and try again.")
 
-    # Write MP3 to a temp file for the Gemini Files API; endpoint cleans it up.
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
     tmp.write(mp3)
     tmp.flush()
     tmp.close()
 
-    # Single Gemini audio call: transcribe + extract expense fields (JSON) in one
-    # request. Doing it in one call (instead of transcribe + separate parse)
-    # halves how much of your Gemini quota each voice note consumes.
+    reply = ""
     try:
-        reply = await gemini_transcribe(tmp.name, VOICE_AUDIO_PROMPT)
+        if has_gemini():
+            reply = await gemini_transcribe(tmp.name, VOICE_AUDIO_PROMPT)
     except Exception as e:
-        msg = str(e).lower()
         logger.exception("Gemini voice processing failed")
-        if any(k in msg for k in ("quota", "resource_exhausted", "exceeded", "billing")):
-            raise HTTPException(429, "Daily AI limit reached on your Gemini key. Enable billing on your Google AI key or try again tomorrow.")
-        if any(k in msg for k in ("rate", "429")):
-            raise HTTPException(429, "AI is busy (rate limit). Please try again in a moment.")
-        if any(k in msg for k in ("timeout", "deadline")):
-            raise HTTPException(504, "AI timed out. Please try again.")
-        raise HTTPException(502, "Voice transcription failed")
+        if hint:
+            logger.info("Using browser speech transcript after Gemini audio failure")
+            return await _parse_voice_text(hint)
+        raise _ai_error(e, "Voice transcription failed. Please try again.")
     finally:
         try:
             os.unlink(tmp.name)
         except Exception:
             pass
 
-    txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
-    try:
-        parsed = json.loads(txt)
-    except Exception:
-        parsed = {}
-
-    transcript = str(parsed.get("transcript", "")).strip()
-    category = str(parsed.get("category", "other")).lower().strip()
-    if category not in VALID_CATEGORIES:
-        category = "other"
-    sub_category = str(parsed.get("sub_category", "Misc")).strip() or "Misc"
-    merchant_name = str(parsed.get("merchant_name", "")).strip()
-    try:
-        total_amount = float(parsed.get("total_amount", 0) or 0)
-    except Exception:
-        total_amount = 0.0
-
-    items = []
-    for it in (parsed.get("items") or []):
-        if not isinstance(it, dict):
-            continue
-        name = str(it.get("name", "")).strip()
-        if not name:
-            continue
+    parsed = {}
+    if reply:
+        txt = _extract_json_block(_strip_code_fence(reply), "{", "}")
         try:
-            qty = float(it.get("quantity", 1) or 1)
-            price = float(it.get("unit_price", 0) or 0)
+            parsed = json.loads(txt)
         except Exception:
-            qty, price = 1.0, 0.0
-        items.append({"name": name, "quantity": qty, "unit_price": round(price, 2)})
+            parsed = {}
+    out = _normalise_voice_payload(parsed, hint)
+    if not out["transcript"] and hint:
+        out = await _parse_voice_text(hint)
+    elif not out["items"] and out["total_amount"] == 0 and hint:
+        fallback = await _parse_voice_text(hint)
+        if fallback["items"] or fallback["total_amount"] > 0:
+            out = fallback
+    if not out["transcript"] and not out["items"] and out["total_amount"] == 0:
+        raise HTTPException(422, "Could not understand the audio. Please speak the item and amount clearly.")
+    return out
 
-    if not items and total_amount > 0:
-        items = [{"name": sub_category or "Expense", "quantity": 1.0, "unit_price": round(total_amount, 2)}]
-
-    if not transcript and not items and total_amount == 0:
-        raise HTTPException(422, "Could not understand the audio. Please speak the amount and item clearly.")
-
-    return {
-        "transcript": transcript,
-        "category": category,
-        "sub_category": sub_category,
-        "merchant_name": merchant_name,
-        "total_amount": round(total_amount, 2),
-        "items": items,
-    }

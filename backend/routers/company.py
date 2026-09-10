@@ -39,6 +39,34 @@ def _gen_password(n: int = 10) -> str:
     return "".join(secrets.choice(alpha) for _ in range(n))
 
 
+def _gen_numeric_pin(n: int = 6) -> str:
+    return "".join(secrets.choice(string.digits) for _ in range(n))
+
+
+async def _unique_employee_code() -> str:
+    for _ in range(40):
+        code = _gen_numeric_pin(6)
+        if not await db.users.find_one({"employee_code": code}, {"_id": 1}):
+            return code
+    raise RuntimeError("Could not allocate a unique employee code")
+
+
+async def ensure_employee_codes() -> None:
+    """Create a unique sparse index and backfill numeric codes for old employees."""
+    try:
+        await db.users.create_index("employee_code", unique=True, sparse=True, name="uniq_employee_code")
+    except Exception:
+        # Existing inconsistent data must not block application startup. New writes
+        # still explicitly check uniqueness before assigning a code.
+        pass
+    cursor = db.users.find({"role": "employee", "user_type": "corporate", "$or": [
+        {"employee_code": {"$exists": False}}, {"employee_code": None}, {"employee_code": ""}
+    ]})
+    async for emp in cursor:
+        code = await _unique_employee_code()
+        await db.users.update_one({"id": emp["id"]}, {"$set": {"employee_code": code}})
+
+
 def _gen_token() -> str:
     return secrets.token_urlsafe(24)
 
@@ -52,6 +80,7 @@ def _public_employee(u: dict) -> dict:
         "department": u.get("department"),
         "designation": u.get("designation"),
         "employee_id": u.get("employee_id"),
+        "employee_code": u.get("employee_code"),
         "monthly_cap": u.get("monthly_cap"),
         "is_active": u.get("is_active", True),
         "status": u.get("invite_status", "active"),  # active|pending_invite
@@ -126,7 +155,11 @@ async def create_employee(body: EmployeeCreate, user=Depends(get_current_user)):
     if existing:
         raise HTTPException(400, "An account with this email already exists")
 
-    temp_pw = (body.temp_password or "").strip() or _gen_password(10)
+    requested_pw = (body.temp_password or "").strip()
+    if requested_pw and (len(requested_pw) != 6 or not requested_pw.isdigit()):
+        raise HTTPException(400, "Corporate employee temporary PIN must be exactly 6 digits")
+    temp_pw = requested_pw or _gen_numeric_pin(6)
+    employee_code = await _unique_employee_code()
     uid = str(uuid.uuid4())
     phone = "".join(c for c in (body.phone or "") if c.isdigit())[-10:]
     doc = {
@@ -144,6 +177,7 @@ async def create_employee(body: EmployeeCreate, user=Depends(get_current_user)):
         "department": body.department,
         "designation": body.designation,
         "employee_id": body.employee_id,
+        "employee_code": employee_code,
         "monthly_cap": float(body.monthly_cap) if body.monthly_cap else None,
         "is_active": True,
         "invite_status": "active",
@@ -152,7 +186,7 @@ async def create_employee(body: EmployeeCreate, user=Depends(get_current_user)):
     await db.users.insert_one(doc)
     return {
         "employee": _public_employee(doc),
-        "credentials": {"email": body.email.lower(), "temp_password": temp_pw},
+        "credentials": {"email": body.email.lower(), "employee_code": employee_code, "temp_password": temp_pw},
     }
 
 
@@ -172,6 +206,7 @@ async def invite_employee(body: EmployeeInvite, user=Depends(get_current_user)):
         raise HTTPException(400, "An account with this email already exists")
 
     invite_token = _gen_token()
+    employee_code = await _unique_employee_code()
     uid = str(uuid.uuid4())
     phone = "".join(c for c in (body.phone or "") if c.isdigit())[-10:]
     expires = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
@@ -190,6 +225,7 @@ async def invite_employee(body: EmployeeInvite, user=Depends(get_current_user)):
         "department": body.department,
         "designation": body.designation,
         "employee_id": body.employee_id,
+        "employee_code": employee_code,
         "monthly_cap": float(body.monthly_cap) if body.monthly_cap else None,
         "is_active": True,
         "invite_status": "pending_invite",
@@ -221,6 +257,19 @@ async def update_employee(eid: str, body: EmployeeUpdate, user=Depends(get_curre
     return _public_employee(fresh)
 
 
+@router.post("/company/employees/{eid}/reset-pin")
+async def reset_employee_pin(eid: str, user=Depends(get_current_user)):
+    company = await _require_admin(user)
+    emp = await db.users.find_one({"id": eid, "company_id": company["id"], "role": "employee"})
+    if not emp:
+        raise HTTPException(404, "Employee not found")
+    pin = _gen_numeric_pin(6)
+    code = emp.get("employee_code") or await _unique_employee_code()
+    await db.users.update_one({"id": eid}, {"$set": {
+        "employee_code": code, "password": hash_pw(pin), "is_active": True, "invite_status": "active"
+    }})
+    return {"employee_code": code, "temp_password": pin}
+
 @router.delete("/company/employees/{eid}")
 async def remove_employee(eid: str, user=Depends(get_current_user)):
     company = await _require_admin(user)
@@ -250,6 +299,7 @@ async def invite_lookup(token: str):
     return {
         "name": inv.get("name"),
         "email": inv.get("email"),
+        "employee_code": inv.get("employee_code"),
         "company_name": (company or {}).get("name", inv.get("corporate_name")),
     }
 
@@ -261,11 +311,13 @@ async def invite_accept(body: AcceptInviteReq):
         raise HTTPException(404, "Invite not found or already used")
     if (inv.get("invite_expires") or "") < now_iso():
         raise HTTPException(410, "Invite has expired")
-    if len(body.password) < 6:
-        raise HTTPException(400, "Password must be at least 6 characters")
+    pin = (body.password or "").strip()
+    if len(pin) != 6 or not pin.isdigit():
+        raise HTTPException(400, "Choose a 6-digit numeric employee PIN")
     await db.users.update_one({"id": inv["id"]}, {
         "$set": {
-            "password": hash_pw(body.password),
+            "password": hash_pw(pin),
+            "employee_code": inv.get("employee_code") or await _unique_employee_code(),
             "role": "employee",
             "invite_status": "active",
         },

@@ -69,16 +69,19 @@
     "tailwind-merge": "3.2.0",
     "tailwindcss-animate": "1.0.7",
     "vaul": "1.1.2",
-    "zod": "3.24.4"
+    "zod": "3.24.4",
+    "@capacitor/geolocation": "^7"
   },
   "scripts": {
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
-    "mobile:sync": "craco build && cap sync",
-    "mobile:android": "craco build && cap sync android && cap open android",
-    "mobile:ios": "craco build && cap sync ios && cap open ios",
-    "mobile:icons": "capacitor-assets generate --iconBackgroundColor '#0A1128' --iconBackgroundColorDark '#0A1128' --splashBackgroundColor '#0A1128' --splashBackgroundColorDark '#0A1128'"
+    "mobile:sync": "craco build && cap sync && node scripts/patch-native.js",
+    "mobile:android": "craco build && cap sync android && node scripts/patch-native.js android && cap open android",
+    "mobile:ios": "craco build && cap sync ios && node scripts/patch-native.js ios && cap open ios",
+    "mobile:icons": "capacitor-assets generate --iconBackgroundColor '#0A1128' --iconBackgroundColorDark '#0A1128' --splashBackgroundColor '#0A1128' --splashBackgroundColorDark '#0A1128'",
+    "mobile:prepare": "node scripts/prepare-native.js",
+    "mobile:doctor": "node scripts/mobile-doctor.js"
   },
   "browserslist": {
     "production": [
@@ -99,7 +102,6 @@
     "@capacitor/cli": "^7",
     "@capacitor/ios": "^7",
     "@craco/craco": "7.1.0",
-    "@emergentbase/visual-edits": "https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.13.tgz",
     "@eslint/js": "9.23.0",
     "@types/lodash": "4.17.24",
     "autoprefixer": "10.4.20",

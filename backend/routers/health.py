@@ -24,7 +24,6 @@ async def providers():
             "using_own_keys": {
                 "gemini": bool(os.environ.get("GEMINI_API_KEY")),
             },
-            "fallback_emergent_llm": bool(os.environ.get("EMERGENT_LLM_KEY")),
         },
         "email": {
             "enabled": has_email(),

@@ -91,14 +91,3 @@ credentials.json
 
 # Sensitive runtime payment receipt uploads (legacy only; new proofs are MongoDB-backed)
 backend/private_uploads/
-
-.env
-.env.*
-*.env
-backend/private_uploads/
-private_uploads/
-node_modules/
-venv/
-.venv/
-__pycache__/
-.gitconfig

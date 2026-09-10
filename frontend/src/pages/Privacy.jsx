@@ -47,7 +47,7 @@ export default function Privacy() {
         processors strictly for delivering the Service:
       </P>
       <UL>
-        <li><b>AI vision provider</b> (Google Gemini via Emergent) — receives your uploaded
+        <li><b>AI vision provider</b> (Google Gemini) — receives your uploaded
             image solely to return detected items. No personally identifying account info is sent.</li>
         <li><b>Cloud hosting</b> — to store your account, expenses and PDFs.</li>
         <li><b>Payment gateway</b> (when integrated) — only the transaction info needed to

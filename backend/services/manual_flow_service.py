@@ -36,6 +36,7 @@ S_PROOF_SUBMITTED = "proof_submitted"
 S_FEE_DUE = "fee_due"
 S_FEE_PENDING = "fee_pending"
 S_FEE_PAID = "fee_paid"
+S_GENERATION_FAILED = "generation_failed"
 S_COMPLETED = "completed"
 
 
@@ -74,13 +75,11 @@ async def _fee_percent() -> str:
 
 
 async def _fee_percent_for_user(user) -> str:
-    """The Super-Admin-configured bill fee % for THIS user's type. Corporate
-    accounts are on a subscription -> 0% per-bill fee. Only individuals are charged."""
+    """Return the Super-Admin-configured bill fee % for this user's type."""
     from services import payment_service
-    if payment_service.bill_fee_kind_for_user(user) == "corporate":
-        return "0"
+    kind = payment_service.bill_fee_kind_for_user(user)
     percents = await payment_service.get_bill_fee_percents()
-    return str(percents["individual"])
+    return str(percents[kind])
 
 
 def _public(txn: dict) -> dict:
@@ -109,6 +108,8 @@ def _public(txn: dict) -> dict:
         "bill_id": txn.get("bill_id"),
         "expense_id": txn.get("expense_id"),
         "bill_status": txn.get("bill_status"),
+        "generation_retryable": txn.get("bill_status") == "generation_failed" or txn.get("state") == S_GENERATION_FAILED,
+        "generation_error": txn.get("generation_error"),
         "verification": _public_verification(txn.get("verification")),
         "created_at": txn.get("created_at"),
     }
@@ -158,9 +159,22 @@ async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, exp
     fee_percent = await _fee_percent_for_user(user)
     b = compute_fee_breakdown(merchant_amount_paise, fee_percent)
 
+    # Never abandon a payment that has already been verified. If the browser
+    # lost local state, recover the protected transaction instead of creating a
+    # second payment/bill attempt.
+    protected = await db.manual_transactions.find_one({
+        "user_id": user["id"],
+        "merchant_verification_status": {"$in": ["verified", "admin_reviewed"]},
+        "bill_id": None,
+        "state": {"$ne": "cancelled"},
+    }, sort=[("created_at", -1)])
+    if protected:
+        logger.info("[manual_flow] recovered verified txn=%s instead of starting another", protected.get("id"))
+        return _public(protected)
+
     tid = f"B4P-{now_iso()[:4]}-{uuid.uuid4().hex[:8].upper()}"
 
-    # Only ONE active payment attempt per user: supersede any lingering ones so
+    # Only ONE active UNVERIFIED payment attempt per user: supersede any lingering ones so
     # an abandoned/discarded bill can never resurface as the current payment.
     await db.manual_transactions.update_many(
         {
@@ -170,6 +184,7 @@ async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, exp
                               S_FEE_DUE, S_FEE_PENDING]},
             "bill_id": None,
             "fee_status": {"$ne": "paid"},
+            "merchant_verification_status": {"$nin": ["verified", "admin_reviewed"]},
         },
         {"$set": {"state": "cancelled", "merchant_payment_status": "cancelled",
                   "cancel_reason": "superseded_by_new_attempt",
@@ -254,10 +269,14 @@ async def second_scan(user, tid, payee_upi):
 
 
 # ---------------- Cancel payment session ----------------
+_FINALIZED_MSG = "Payment is already verified and protected. Do not pay again or discard it; continue/retry bill generation."
+
 async def cancel(user, tid):
     txn = await _owned(user, tid)
-    if txn.get("bill_status") == "generated":
-        raise ValueError("Receipt already generated; cannot cancel")
+    if (txn.get("bill_status") == "generated" or txn.get("bill_id") or
+            txn.get("fee_status") == "paid" or
+            txn.get("merchant_verification_status") in ("verified", "admin_reviewed")):
+        raise ValueError(_FINALIZED_MSG)
     await db.manual_transactions.update_one(
         {"id": tid, "user_id": user["id"]},
         {"$set": {"state": "cancelled", "merchant_payment_status": "cancelled",
@@ -267,9 +286,6 @@ async def cancel(user, tid):
 
 
 # ---------------- Discard bill & start fresh / Restart payment attempt ----------------
-_FINALIZED_MSG = "This payment is already finalized — it cannot be discarded (use admin void/refund)"
-
-
 async def discard(user, tid):
     """Discard the current bill AND its payment attempt. The record stays in the
     database for audit (state=cancelled) but never resurfaces in the active flow.
@@ -454,9 +470,12 @@ async def _verify_wallet_pin(user_id: str, pin: str | None) -> None:
 
 
 async def _debit_wallet_fee(txn) -> str | None:
-    """Debit the service fee from the wallet exactly once. Returns 'paid',
-    'insufficient', or 'already'. Uses a unique wallet_ledger entry as the
-    idempotency guard (transaction_id + type)."""
+    """Debit the configured bill-generation fee exactly once.
+
+    Individual users are charged from their personal wallet. Corporate admins
+    and employees are charged from the central company wallet. The unique ledger
+    key (transaction_id + type) makes retries/concurrent calls idempotent.
+    """
     tid = txn["id"]
     fee_paise = int(txn.get("platform_fee_paise") or 0)
     fee_rupees = round(fee_paise / 100, 2)
@@ -466,39 +485,63 @@ async def _debit_wallet_fee(txn) -> str | None:
         return "already"
 
     uid = txn["user_id"]
-    u = await db.users.find_one({"id": uid})
-    bal_paise = int(round(float(u.get("wallet_balance", 0.0)) * 100))
-    if bal_paise < fee_paise:
-        return "insufficient"
+    cid = txn.get("company_id")
+    is_corporate = bool(cid)
 
-    debited = await db.users.find_one_and_update(
-        {"id": uid, "wallet_balance": {"$gte": fee_rupees}},
-        {"$inc": {"wallet_balance": -fee_rupees}},
-        return_document=_AFTER,
-    )
+    if is_corporate:
+        company = await db.companies.find_one({"id": cid})
+        if not company:
+            raise ValueError("Company not found")
+        bal_paise = int(round(float(company.get("wallet_balance", 0.0)) * 100))
+        if bal_paise < fee_paise:
+            return "insufficient"
+        debited = await db.companies.find_one_and_update(
+            {"id": cid, "wallet_balance": {"$gte": fee_rupees}},
+            {"$inc": {"wallet_balance": -fee_rupees}},
+            return_document=_AFTER,
+        )
+    else:
+        u = await db.users.find_one({"id": uid})
+        bal_paise = int(round(float((u or {}).get("wallet_balance", 0.0)) * 100))
+        if bal_paise < fee_paise:
+            return "insufficient"
+        debited = await db.users.find_one_and_update(
+            {"id": uid, "wallet_balance": {"$gte": fee_rupees}},
+            {"$inc": {"wallet_balance": -fee_rupees}},
+            return_document=_AFTER,
+        )
+
     if not debited:
         return "insufficient"
 
     ledger_id = str(uuid.uuid4())
+    ledger = {
+        "ledger_id": ledger_id, "transaction_id": tid, "type": "bill4pe_service_fee",
+        "amount_paise": -fee_paise, "balance_before_paise": bal_paise,
+        "balance_after_paise": bal_paise - fee_paise, "created_at": now_iso(),
+    }
+    if is_corporate:
+        ledger["company_id"] = cid
+        ledger["user_id"] = uid
+    else:
+        ledger["user_id"] = uid
     try:
-        await db.wallet_ledger.insert_one({
-            "ledger_id": ledger_id,
-            "transaction_id": tid,
-            "type": "bill4pe_service_fee",
-            "amount_paise": -fee_paise,
-            "balance_before_paise": bal_paise,
-            "balance_after_paise": bal_paise - fee_paise,
-            "created_at": now_iso(),
-        })
+        await db.wallet_ledger.insert_one(ledger)
     except DuplicateKeyError:
-        # A concurrent caller already recorded the fee — refund our debit.
-        await db.users.update_one({"id": uid}, {"$inc": {"wallet_balance": fee_rupees}})
+        # Another worker won the ledger claim: refund this duplicate debit.
+        if is_corporate:
+            await db.companies.update_one({"id": cid}, {"$inc": {"wallet_balance": fee_rupees}})
+        else:
+            await db.users.update_one({"id": uid}, {"$inc": {"wallet_balance": fee_rupees}})
         return "already"
 
-    await db.wallet_txns.insert_one({
+    wallet_txn = {
         "id": str(uuid.uuid4()), "user_id": uid, "type": "debit",
         "amount": fee_rupees, "reason": f"Bill Generation Charges ({tid})", "created_at": now_iso(),
-    })
+    }
+    if is_corporate:
+        wallet_txn["company_id"] = cid
+    await db.wallet_txns.insert_one(wallet_txn)
     await db.manual_transactions.update_one({"id": tid}, {"$set": {"wallet_ledger_id": ledger_id}})
     return "paid"
 
@@ -517,10 +560,10 @@ async def generate_receipt(user, tid, wallet_pin: str | None = None):
         raise ValueError("Payment is not verified yet — upload a clear receipt that matches the bill amount and payee")
 
     if txn.get("fee_status") != "paid":
-        # Individual wallet payments are explicit: ask for and verify the same
-        # 4-digit Wallet PIN created during onboarding. Corporate/no-fee bills
-        # keep their existing automatic flow.
-        if int(txn.get("platform_fee_paise") or 0) > 0:
+        # Personal-wallet payments require the user's 4-digit Wallet PIN.
+        # Corporate bills debit the central company wallet and therefore do not
+        # ask an employee for a personal Wallet PIN.
+        if int(txn.get("platform_fee_paise") or 0) > 0 and not txn.get("company_id"):
             await _verify_wallet_pin(user["id"], wallet_pin)
         res = await _debit_wallet_fee(txn)
         if res in ("paid", "already"):
@@ -530,11 +573,17 @@ async def generate_receipt(user, tid, wallet_pin: str | None = None):
             )
         else:
             fee = round((txn.get("platform_fee_paise") or 0) / 100, 2)
-            u = await db.users.find_one({"id": user["id"]})
+            if txn.get("company_id"):
+                wallet_doc = await db.companies.find_one({"id": txn.get("company_id")}) or {}
+                wallet_scope = "company"
+            else:
+                wallet_doc = await db.users.find_one({"id": user["id"]}) or {}
+                wallet_scope = "personal"
             return {
                 "generated": False, "needs_fee": True,
                 "fee": fee, "fee_paise": txn.get("platform_fee_paise"),
-                "wallet_balance": round(float(u.get("wallet_balance", 0.0)), 2),
+                "wallet_scope": wallet_scope,
+                "wallet_balance": round(float(wallet_doc.get("wallet_balance", 0.0)), 2),
                 **_public(await db.manual_transactions.find_one({"id": tid})),
             }
 
@@ -544,104 +593,173 @@ async def generate_receipt(user, tid, wallet_pin: str | None = None):
 
 
 async def _make_receipt(txn, user) -> dict:
-    """Create ONE expense + one sequential bill for a fee-paid transaction."""
+    """Create exactly one expense/bill for a verified, fee-paid transaction.
+
+    Recovery guarantee: if payment/fee is already safe but PDF/bill generation
+    fails, the transaction becomes retryable instead of asking the customer to
+    discard or pay again. If an expense was inserted before a crash, the next
+    retry repairs the transaction from that existing expense.
+    """
+    import asyncio
+    from datetime import datetime, timezone
+
     tid = txn["id"]
-    # Atomic claim: only one caller generates.
+
+    # Crash-recovery checkpoint: expense may already exist even if the manual
+    # transaction update was interrupted. Reuse it; NEVER create a second bill.
+    existing = await db.expenses.find_one({"transaction_id": tid}, {"_id": 0})
+    if existing and existing.get("bill_id"):
+        await db.manual_transactions.update_one({"id": tid}, {"$set": {
+            "expense_id": existing.get("id"),
+            "bill_id": existing.get("bill_id"),
+            "bill_status": "generated",
+            "state": S_COMPLETED,
+            "generation_error": None,
+            "updated_at": now_iso(),
+        }})
+        return {"bill_id": existing.get("bill_id"), "expense_id": existing.get("id"), "existing": True}
+
+    current = await db.manual_transactions.find_one({"id": tid}) or txn
+    # A prior worker may still be generating. Give it a short chance to finish.
+    if current.get("bill_status") == "generating":
+        for _ in range(16):
+            await asyncio.sleep(0.25)
+            fresh = await db.manual_transactions.find_one({"id": tid}) or {}
+            if fresh.get("bill_id"):
+                return {"bill_id": fresh["bill_id"], "expense_id": fresh.get("expense_id"), "existing": True}
+            existing = await db.expenses.find_one({"transaction_id": tid}, {"_id": 0})
+            if existing and existing.get("bill_id"):
+                await db.manual_transactions.update_one({"id": tid}, {"$set": {
+                    "expense_id": existing.get("id"), "bill_id": existing.get("bill_id"),
+                    "bill_status": "generated", "state": S_COMPLETED,
+                    "generation_error": None, "updated_at": now_iso(),
+                }})
+                return {"bill_id": existing.get("bill_id"), "expense_id": existing.get("id"), "existing": True}
+
+        # Reclaim only a stale generation lease. A live worker is never raced.
+        started = current.get("generation_started_at")
+        stale = False
+        if started:
+            try:
+                dt = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                stale = (datetime.now(timezone.utc) - dt).total_seconds() > 90
+            except Exception:
+                stale = True
+        else:
+            stale = True
+        if stale:
+            await db.manual_transactions.update_one(
+                {"id": tid, "bill_status": "generating"},
+                {"$set": {"bill_status": "generation_failed", "state": S_GENERATION_FAILED,
+                           "generation_error": "Previous bill generation was interrupted. Safe to retry.",
+                           "updated_at": now_iso()}},
+            )
+        else:
+            raise ValueError("Payment is verified and safe. Bill generation is still processing; wait a moment and tap Retry. Do not pay again.")
+
+    # Atomic generation claim. Retries are allowed only from pending/failed.
     claim = await db.manual_transactions.find_one_and_update(
-        {"id": tid, "bill_status": "pending", "fee_status": "paid"},
-        {"$set": {"bill_status": "generating"}},
+        {"id": tid, "bill_status": {"$in": ["pending", "generation_failed"]}, "fee_status": "paid"},
+        {"$set": {"bill_status": "generating", "state": S_FEE_PAID,
+                  "generation_started_at": now_iso(), "generation_error": None, "updated_at": now_iso()}},
         return_document=_AFTER,
     )
     if not claim:
-        # Another caller is generating (or already did). Briefly poll so we never
-        # return a null bill_id to the client while the winner finishes writing it.
-        import asyncio
-        for _ in range(20):
-            fresh = await db.manual_transactions.find_one({"id": tid})
-            if fresh.get("bill_id"):
-                return {"bill_id": fresh["bill_id"], "existing": True}
-            await asyncio.sleep(0.15)
-        return {"bill_id": None, "existing": True}
+        fresh = await db.manual_transactions.find_one({"id": tid}) or {}
+        if fresh.get("bill_id"):
+            return {"bill_id": fresh["bill_id"], "expense_id": fresh.get("expense_id"), "existing": True}
+        raise ValueError("Payment is verified and safe. Bill generation could not start yet; tap Retry. Do not pay again.")
 
-    draft = txn.get("expense_draft") or {}
-    items = draft.get("items") or [{
-        "name": txn.get("payee_name_snapshot") or "Merchant payment",
-        "quantity": 1,
-        "unit_price": round((txn.get("merchant_amount_paise") or 0) / 100, 2),
-    }]
-    total = round((txn.get("merchant_amount_paise") or 0) / 100, 2)
-    fee = round((txn.get("platform_fee_paise") or 0) / 100, 2)
-    eid = str(uuid.uuid4())
-    bill_id = await billing_service.next_bill_number()
+    txn = claim
+    try:
+        draft = txn.get("expense_draft") or {}
+        items = draft.get("items") or [{
+            "name": txn.get("payee_name_snapshot") or "Merchant payment",
+            "quantity": 1,
+            "unit_price": round((txn.get("merchant_amount_paise") or 0) / 100, 2),
+        }]
+        total = round((txn.get("merchant_amount_paise") or 0) / 100, 2)
+        fee = round((txn.get("platform_fee_paise") or 0) / 100, 2)
+        eid = str(uuid.uuid4())
+        bill_id = await billing_service.next_bill_number()
 
-    snapshot = {
-        "document_title": "BILL4PE DIGITAL SELF INVOICE",
-        "merchant_name": txn.get("payee_name_snapshot"),
-        "merchant_upi": txn.get("payee_upi_snapshot"),
-        "merchant_payment_status_label": "Payment Verified via Receipt" if txn.get("merchant_verification_status") in ("verified", "admin_reviewed") else "Payment Confirmed by User",
-        "customer_name": user.get("name"),
-        "customer_email": user.get("email"),
-        "items": [{"name": i.get("name"), "quantity": float(i.get("quantity", 1) or 1),
-                   "unit_price": float(i.get("unit_price", 0) or 0),
-                   "amount": round(float(i.get("quantity", 1) or 1) * float(i.get("unit_price", 0) or 0), 2)}
-                  for i in items],
-        "subtotal": total,
-        "total": total,
-        "currency": "INR",
-        "model": "manual_upi_double_scan",
-        "utr": _mask_utr(txn.get("utr_full")) or txn.get("utr_last4"),
-        "bill4pe_service_fee": fee,
-        "bill_generation_charge_percent": float(txn.get("platform_fee_percent_snapshot") or 0),
-        "fee_payment_method": txn.get("fee_payment_method"),
-        "fee_status": "paid",
-        "frozen_at": now_iso(),
-    }
-    geo = draft.get("prefill_geo") or {}
-    latitude = geo.get("lat") if isinstance(geo, dict) else None
-    longitude = geo.get("lng") if isinstance(geo, dict) else None
-
-    expense = {
-        "id": eid,
-        "user_id": txn["user_id"],
-        "company_id": txn.get("company_id"),
-        "category": draft.get("category", "other"),
-        "sub_category": draft.get("sub_category"),
-        "items": snapshot["items"],
-        "payment": {
+        snapshot = {
+            "document_title": "BILL4PE DIGITAL SELF INVOICE",
             "merchant_name": txn.get("payee_name_snapshot"),
             "merchant_upi": txn.get("payee_upi_snapshot"),
-            "transaction_id": tid,
-            "amount": total,
-            "payment_method": "UPI (direct to merchant)",
-            "payment_status": "verified" if txn.get("merchant_verification_status") in ("verified", "admin_reviewed") else "user_confirmed",
-            # Location is captured in the bill-entry flow and carried through the
-            # receipt/payment attempt so the generated PDF no longer shows "—".
-            "latitude": latitude,
-            "longitude": longitude,
-        },
-        "total": total,
-        "notes": draft.get("notes"),
-        "approval_status": "approved",
-        "bill_generated": True,
-        "bill_id": bill_id,
-        "bill_number": bill_id,
-        "bill_fee": fee,
-        "bill_fee_percent": float(txn.get("platform_fee_percent_snapshot") or 0),
-        "bill_fee_settled": True,
-        "bill_status": "generated",
-        "bill_snapshot": snapshot,
-        "bill_generated_at": now_iso(),
-        "source": "manual_upi_double_scan",
-        "transaction_id": tid,
-        "created_at": now_iso(),
-    }
-    await db.expenses.insert_one(expense)
-    await db.manual_transactions.update_one({"id": tid}, {"$set": {
-        "expense_id": eid, "bill_id": bill_id, "bill_status": "generated",
-        "state": S_COMPLETED, "updated_at": now_iso(),
-    }})
-    logger.info("[manual_flow] receipt %s (expense %s) for txn %s", bill_id, eid, tid)
-    return {"bill_id": bill_id, "expense_id": eid, "existing": False}
+            "merchant_payment_status_label": "Payment Verified via Receipt",
+            "customer_name": user.get("name"),
+            "customer_email": user.get("email"),
+            "items": [{
+                "name": i.get("name"),
+                "quantity": float(i.get("quantity", 1) or 1),
+                "unit_price": float(i.get("unit_price", 0) or 0),
+                "amount": round(float(i.get("quantity", 1) or 1) * float(i.get("unit_price", 0) or 0), 2),
+            } for i in items],
+            "subtotal": total, "total": total, "currency": "INR",
+            "model": "manual_upi_double_scan",
+            "utr": _mask_utr(txn.get("utr_full")) or txn.get("utr_last4"),
+            "bill4pe_service_fee": fee,
+            "bill_generation_charge_percent": float(txn.get("platform_fee_percent_snapshot") or 0),
+            "fee_payment_method": txn.get("fee_payment_method"),
+            "fee_status": "paid", "frozen_at": now_iso(),
+        }
+        geo = draft.get("prefill_geo") or {}
+        latitude = geo.get("lat") if isinstance(geo, dict) else None
+        longitude = geo.get("lng") if isinstance(geo, dict) else None
+
+        expense = {
+            "id": eid, "user_id": txn["user_id"], "company_id": txn.get("company_id"),
+            "category": draft.get("category", "other"), "sub_category": draft.get("sub_category"),
+            "items": snapshot["items"],
+            "payment": {
+                "merchant_name": txn.get("payee_name_snapshot"), "merchant_upi": txn.get("payee_upi_snapshot"),
+                "transaction_id": tid, "amount": total, "payment_method": "UPI (direct to merchant)",
+                "payment_status": "verified", "latitude": latitude, "longitude": longitude,
+            },
+            "total": total, "notes": draft.get("notes"), "approval_status": "approved",
+            "bill_generated": True, "bill_id": bill_id, "bill_number": bill_id,
+            "bill_fee": fee, "bill_fee_percent": float(txn.get("platform_fee_percent_snapshot") or 0),
+            "bill_fee_settled": True, "bill_status": "generated", "bill_snapshot": snapshot,
+            "bill_generated_at": now_iso(), "source": "manual_upi_double_scan",
+            "transaction_id": tid, "created_at": now_iso(),
+        }
+
+        # Recheck before insert in case a recovery/parallel request completed.
+        existing = await db.expenses.find_one({"transaction_id": tid}, {"_id": 0})
+        if existing and existing.get("bill_id"):
+            await db.manual_transactions.update_one({"id": tid}, {"$set": {
+                "expense_id": existing.get("id"), "bill_id": existing.get("bill_id"),
+                "bill_status": "generated", "state": S_COMPLETED, "generation_error": None,
+                "updated_at": now_iso(),
+            }})
+            return {"bill_id": existing.get("bill_id"), "expense_id": existing.get("id"), "existing": True}
+
+        await db.expenses.insert_one(expense)
+        await db.manual_transactions.update_one({"id": tid}, {"$set": {
+            "expense_id": eid, "bill_id": bill_id, "bill_status": "generated",
+            "state": S_COMPLETED, "generation_error": None, "generation_completed_at": now_iso(),
+            "updated_at": now_iso(),
+        }})
+        logger.info("[manual_flow] receipt %s (expense %s) for txn %s", bill_id, eid, tid)
+        return {"bill_id": bill_id, "expense_id": eid, "existing": False}
+    except ValueError:
+        # Preserve an intentional retryable flow message but release our lease.
+        await db.manual_transactions.update_one({"id": tid, "bill_status": "generating"}, {"$set": {
+            "bill_status": "generation_failed", "state": S_GENERATION_FAILED,
+            "generation_error": "Bill generation did not complete. Safe to retry.", "updated_at": now_iso(),
+        }})
+        raise
+    except Exception as exc:
+        logger.exception("[manual_flow] bill generation failed txn=%s", tid)
+        # Payment and fee remain VERIFIED/PAID. Only generation is retryable.
+        await db.manual_transactions.update_one({"id": tid, "bill_status": "generating"}, {"$set": {
+            "bill_status": "generation_failed", "state": S_GENERATION_FAILED,
+            "generation_error": "Bill generation did not complete. Safe to retry.", "updated_at": now_iso(),
+        }})
+        raise ValueError("Payment is verified and safe. Bill generation did not complete. Tap Retry — do not pay again.") from exc
 
 
 # ---------------- Bill4Pe fee via Razorpay (server-verified) ----------------
@@ -688,7 +806,13 @@ async def verify_fee_payment(user, tid, order_id, payment_id, signature):
     from services import razorpay_service
     txn = await _owned(user, tid)
     if txn.get("fee_status") == "paid":
-        return {"generated": bool(txn.get("bill_id")), **_public(txn)}
+        if txn.get("bill_id"):
+            return {"generated": True, **_public(txn)}
+        # Checkout callback may be repeated after an interrupted generation. The
+        # fee is already safe/paid, so retry ONLY bill creation and never charge again.
+        bill = await _make_receipt(txn, user)
+        fresh = await db.manual_transactions.find_one({"id": tid})
+        return {"generated": bool(bill.get("bill_id")), "bill_id": bill.get("bill_id"), **_public(fresh)}
     if txn.get("razorpay_fee_order_id") and txn["razorpay_fee_order_id"] != order_id:
         raise ValueError("Fee order does not match this transaction")
     if not razorpay_service.verify_checkout_signature(order_id, payment_id, signature):
@@ -714,6 +838,17 @@ async def get_status(user, tid):
     # Cancelled/discarded/superseded attempts are audit-only — never ACTIVE.
     if txn.get("state") == "cancelled":
         return None
+    # Self-heal the rare crash window where the expense/bill was inserted but
+    # the payment transaction did not receive its bill_id yet.
+    if not txn.get("bill_id"):
+        existing = await db.expenses.find_one({"transaction_id": tid}, {"_id": 0, "id": 1, "bill_id": 1})
+        if existing and existing.get("bill_id"):
+            await db.manual_transactions.update_one({"id": tid}, {"$set": {
+                "expense_id": existing.get("id"), "bill_id": existing.get("bill_id"),
+                "bill_status": "generated", "state": S_COMPLETED, "generation_error": None,
+                "updated_at": now_iso(),
+            }})
+            txn = await db.manual_transactions.find_one({"id": tid})
     return _public(txn)
 
 

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import api from '@/lib/api';
 import { catByKey } from '@/lib/categories';
+import { isNative, pickNativeImage } from '@/lib/native';
 
 export default function Capture() {
   const { cat, sub } = useParams();
@@ -14,9 +15,10 @@ export default function Capture() {
   const [scanning, setScanning] = useState(false);
   const [preview, setPreview] = useState(null);
 
-  const onFile = async (e) => {
-    const file = e.target.files?.[0];
+  const processFile = async (file) => {
     if (!file) return;
+    if (!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type || '')) { toast.error('Use a JPG, PNG or WEBP photo'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('Photo is too large. Please use an image under 10 MB.'); return; }
     setPreview(URL.createObjectURL(file));
     setScanning(true);
     try {
@@ -27,18 +29,39 @@ export default function Capture() {
       });
       const items = data?.items || [];
       if (!items.length) {
-        toast.warning('Could not detect items. Try a clearer photo or use manual entry.');
+        toast.warning('No product could be identified. Try a clearer, closer photo or use manual entry.');
         setScanning(false);
         return;
       }
       sessionStorage.setItem('bill4pe_draft', JSON.stringify({
         category: cat, sub_category: sub, items,
       }));
+      const needsPrice = items.some((i) => Number(i.unit_price || 0) <= 0);
+      toast.success(needsPrice ? 'Product identified — please check/add the price.' : 'Product identified successfully');
       nav('/app/editor');
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'AI detection failed');
       setScanning(false);
     }
+  };
+
+  const openCamera = async () => {
+    if (isNative()) {
+      try {
+        const file = await pickNativeImage({ cameraOnly: true });
+        if (file) await processFile(file);
+      } catch (err) {
+        if (!String(err?.message || err).toLowerCase().includes('cancel')) toast.error('Could not open camera');
+      }
+      return;
+    }
+    fileRef.current?.click();
+  };
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await processFile(file);
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const goManual = () => {
@@ -78,7 +101,7 @@ export default function Capture() {
         >
           <motion.button
             variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
-            onClick={() => fileRef.current?.click()}
+            onClick={openCamera}
             data-testid="capture-take-image-btn"
             className="press-down w-full flat-card p-5 text-left hover:border-navy flex items-center gap-4"
           >

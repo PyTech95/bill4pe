@@ -1,7 +1,11 @@
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
+const BACKEND_URL = String(process.env.REACT_APP_BACKEND_URL || '').trim().replace(/\/+$/, '');
+export const API = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
+
+if (!BACKEND_URL && typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost')) {
+  console.error('BILL4PE: REACT_APP_BACKEND_URL is missing. Set frontend/.env before building the mobile app.');
+}
 
 const api = axios.create({ baseURL: API });
 

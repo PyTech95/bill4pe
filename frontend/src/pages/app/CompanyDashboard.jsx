@@ -4,13 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, Users, ClipboardCheck, Wallet as WalletIcon, Plus, Mail,
   Phone, BadgeCheck, Copy, X, Check, AlertCircle, ChevronRight, Trash2,
-  UserPlus, Link as LinkIcon, FileText, ArrowUpRight, Hourglass,
+  UserPlus, Link as LinkIcon, FileText, ArrowUpRight, Hourglass, KeyRound,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { publicWebUrl } from '@/lib/urls';
 import { useAuth } from '@/lib/auth';
+import { openRazorpay } from '@/lib/razorpay';
 
 const TABS = [
   { key: 'overview',  label: 'Overview',  icon: Building2 },
@@ -185,7 +187,7 @@ const Overview = ({ stats, setTab }) => (
     />
     <Action
       label="Recharge company wallet"
-      desc="Used to pay 1% (min ₹1) per bill across all employees."
+      desc="Corporate subscription has no per-bill generation charge."
       onClick={() => setTab('wallet')}
       icon={WalletIcon}
       testid="overview-wallet-cta"
@@ -238,6 +240,18 @@ const Employees = ({ onChange, limit, count }) => {
       load(); onChange?.();
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Failed to remove');
+    }
+  };
+
+  const resetPin = async (employee) => {
+    if (!window.confirm(`Reset the 6-digit PIN for ${employee.name}?`)) return;
+    try {
+      const { data } = await api.post(`/company/employees/${employee.id}/reset-pin`);
+      setCredModal({ email: employee.email, employee_code: data.employee_code, temp_password: data.temp_password });
+      toast.success('New employee PIN generated');
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Could not reset employee PIN');
     }
   };
 
@@ -300,7 +314,18 @@ const Employees = ({ onChange, limit, count }) => {
                   {e.department ? ` · ${e.department}` : ''}
                   {e.designation ? ` · ${e.designation}` : ''}
                 </div>
+                {e.employee_code && <div className="text-[11px] text-brand font-mono mt-0.5">Login code: {e.employee_code}</div>}
               </div>
+              {e.status !== 'pending_invite' && (
+                <button
+                  onClick={() => resetPin(e)}
+                  data-testid={`emp-reset-pin-${e.id}`}
+                  className="press-down w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-amber-50 hover:text-amber-700 transition"
+                  title="Reset 6-digit employee PIN"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 onClick={() => remove(e.id)}
                 data-testid={`emp-remove-${e.id}`}
@@ -322,7 +347,7 @@ const Employees = ({ onChange, limit, count }) => {
             setModal(null); load(); onChange?.();
             if (payload?.credentials) setCredModal(payload.credentials);
             if (payload?.invite) {
-              const url = `${window.location.origin}/accept-invite?token=${payload.invite.token}`;
+              const url = publicWebUrl(`/accept-invite?token=${payload.invite.token}`);
               setInviteModal({ link: url, name: payload.employee?.name });
             }
           }}
@@ -408,7 +433,7 @@ const EmployeeModal = ({ mode, onClose, onCreated }) => {
           data-testid="emp-form-submit"
           className="press-down w-full h-11 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
         >
-          {busy ? 'Saving...' : isInvite ? 'Generate invite link' : 'Create with temp password'}
+          {busy ? 'Saving...' : isInvite ? 'Generate invite link' : 'Create with 6-digit login'}
         </Button>
       </form>
     </ModalShell>
@@ -420,12 +445,13 @@ const CredsModal = ({ info, onClose }) => (
     <div className="rounded-xl bg-lime/30 border border-lime p-3 text-xs text-navy">
       <div className="flex items-start gap-2">
         <BadgeCheck className="w-4 h-4 mt-0.5 shrink-0" />
-        <div>Share these securely. The employee can change the password after first login.</div>
+        <div>Share these securely. Employee login uses the 6-digit code plus 6-digit PIN.</div>
       </div>
     </div>
     <div className="mt-3 space-y-2">
       <CopyRow label="Email" value={info.email} testid="creds-email" />
-      <CopyRow label="Temporary password" value={info.temp_password} testid="creds-password" mono />
+      <CopyRow label="6-digit Employee Code" value={info.employee_code} testid="creds-code" mono />
+      <CopyRow label="Temporary 6-digit PIN" value={info.temp_password} testid="creds-password" mono />
     </div>
     <Button
       onClick={onClose}
@@ -754,11 +780,25 @@ const CompanyWallet = ({ balance, onChange }) => {
     if (!v || v <= 0) { toast.error('Enter a positive amount'); return; }
     setBusy(true);
     try {
-      await api.post('/company/wallet/recharge', { amount: v });
-      toast.success(`₹${v} added to company wallet (mock)`);
-      load(); onChange?.();
-    } catch (e) { toast.error(e?.response?.data?.detail || 'Failed'); }
-    finally { setBusy(false); }
+      const { data: order } = await api.post('/payments/razorpay/order', { amount: v, purpose: 'company_wallet_recharge' });
+      await openRazorpay(order, {
+        name: 'BILL4PE Company Wallet',
+        description: `Add ₹${v} to company wallet`,
+        onSuccess: async (resp) => {
+          await api.post('/payments/razorpay/verify', {
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+            purpose: 'company_wallet_recharge',
+          });
+          await load();
+          await onChange?.();
+          toast.success(`₹${v} added to company wallet`);
+        },
+      });
+    } catch (e) {
+      if (e?.message !== 'CHECKOUT_DISMISSED') toast.error(e?.response?.data?.detail || e?.message || 'Company wallet recharge failed');
+    } finally { setBusy(false); }
   };
 
   return (
@@ -771,12 +811,12 @@ const CompanyWallet = ({ balance, onChange }) => {
           {inr(balance)}
         </div>
         <div className="text-[11px] text-white/60 mt-1">
-          Pays 1% (min ₹1) of every bill generated across your employees.
+          Configured Corporate Bill Generation Charges are deducted from this central wallet.
         </div>
       </div>
 
       <div className="rounded-2xl border border-soft bg-white p-4">
-        <div className="text-xs font-semibold text-navy">Recharge (mock)</div>
+        <div className="text-xs font-semibold text-navy">Recharge securely via Razorpay</div>
         <div className="flex gap-2 mt-2">
           {[500, 1000, 5000].map((v) => (
             <button

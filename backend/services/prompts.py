@@ -26,10 +26,29 @@ Return ONLY a strict JSON array. No markdown, no prose, no code fences. Example:
 
 If the image is not food-related, return []."""
 
-GENERIC_PROMPT = """You are an expense bill assistant. Analyze the image (could be receipt, products, bill, items).
+GENERIC_PROMPT = """You are an Indian expense/product visual identification assistant. Analyze the image carefully. It may be a product photo, shopping bag, food item, office supply, receipt, menu, bill or a group of purchased items.
 
-Detect each line item. Return ONLY a strict JSON array of {"name": str, "quantity": int, "unit_price": float (INR)}.
-No markdown, no prose, no code fences. If nothing detectable, return []."""
+Your FIRST job is to IDENTIFY what is visible. Do not return an empty result merely because a price is not printed.
+For every clearly visible purchasable item return a JSON object with:
+- "name": specific human-friendly product/item name; include brand/pack size when readable
+- "quantity": visible count, default 1
+- "unit_price": INR price if visible; otherwise a conservative typical Indian retail estimate when reasonable; if impossible, use 0
+
+Return ONLY a strict JSON array of {"name": str, "quantity": number, "unit_price": number}.
+No markdown, no prose, no code fences. Only return [] when there is genuinely no identifiable purchasable item in the image."""
+
+PRODUCT_FALLBACK_PROMPT = """You are a robust product recognizer for an Indian expense app. The previous specialized detector found no items, so inspect the image again without assuming a category.
+
+Identify the most likely visible product, dish, packaged good, stationery item, grocery item, transport/receipt line, or expense-related object. Return up to 10 distinct items. Brand and pack size should be included when readable.
+
+Return ONLY strict JSON in this exact shape:
+{"items":[{"name":"<item>","quantity":1,"unit_price":0}],"note":"<short confidence note>"}
+
+Rules:
+- Never invent a brand that is not visible.
+- If price is visible, use it. If not visible, use 0 rather than refusing identification.
+- Only return {"items":[]} when no expense/product item can reasonably be identified.
+- No markdown or prose outside JSON."""
 
 
 GROCERY_PROMPT = """You are an Indian grocery shopping assistant. Look at the photo (could be a kirana store basket, supermarket cart, kitchen counter of bought groceries, or assorted packaged products).
@@ -138,8 +157,8 @@ Return ONLY a strict JSON object, no markdown, no prose, no code fences. Example
 If receipt unreadable, return {"merchant_name":"","date":"","items":[],"subtotal":0,"tax":0,"total":0,"category":"other"}."""
 
 
-VOICE_PARSE_PROMPT = """Parse this Indian expense voice note (Hindi/English/Hinglish) into STRICT JSON only (no markdown, no fences):
-{"category":"food|travel|hotel|stationery|gift|pantry|flower|grocery|cleaning|other","sub_category":"<short>","merchant_name":"<or empty>","total_amount":<INR number>,"items":[{"name":"<str>","quantity":<int>,"unit_price":<float>}]}
+VOICE_PARSE_PROMPT = """Parse this Indian expense voice transcript (Hindi/English/Hinglish) into STRICT JSON only (no markdown, no fences):
+{"transcript":"<preserve the supplied transcript>","category":"food|travel|hotel|stationery|gift|pantry|flower|grocery|cleaning|other","sub_category":"<short>","merchant_name":"<or empty>","total_amount":<INR number>,"items":[{"name":"<str>","quantity":<int>,"unit_price":<float>}]}
 
 If only total mentioned (e.g. "spent 250 on lunch"), create one item: name=sub_category, qty=1, price=total.
 Examples:
@@ -169,6 +188,8 @@ RULES:
 - Amounts are Indian Rupees. "dhai sau"=250, "paanch sau"=500, "hazaar"=1000.
 - If only a total is mentioned (e.g. "spent 250 on lunch"), create ONE item: name=sub_category, quantity=1, unit_price=total_amount.
 - If silent/unclear, return the JSON with "transcript":"" and total_amount 0.
+- Preserve the spoken words in "transcript" even if some expense fields are uncertain.
+- Understand common Indian number words such as sau/hundred, hazaar/thousand, lakh, dhai=2.5, saade=and-a-half where context is clear.
 - Output JSON only, nothing else."""
 
 

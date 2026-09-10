@@ -5,6 +5,7 @@ import { ScanText, X, Loader2, Sparkles, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { catByKey } from '@/lib/categories';
+import { isNative, pickNativeImage } from '@/lib/native';
 
 export const ReceiptScan = () => {
   const nav = useNavigate();
@@ -12,10 +13,7 @@ export const ReceiptScan = () => {
   const [scanning, setScanning] = useState(false);
   const [preview, setPreview] = useState(null);
 
-  const onPick = () => fileRef.current?.click();
-
-  const onFile = async (e) => {
-    const file = e.target.files?.[0];
+  const processFile = async (file) => {
     if (!file) return;
     setPreview(URL.createObjectURL(file));
     setScanning(true);
@@ -50,6 +48,24 @@ export const ReceiptScan = () => {
       // input reset so same file can be picked again
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const onPick = async () => {
+    if (isNative()) {
+      try {
+        const file = await pickNativeImage({ cameraOnly: false });
+        if (file) await processFile(file);
+      } catch (err) {
+        if (!String(err?.message || err).toLowerCase().includes('cancel')) toast.error('Could not open camera/photos');
+      }
+      return;
+    }
+    fileRef.current?.click();
+  };
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await processFile(file);
   };
 
   return (

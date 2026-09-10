@@ -87,6 +87,11 @@ async def create_payment_order(user, purpose, amount=None, expense_draft=None, b
     amount = round(float(amount), 2)
     if purpose == "wallet_recharge" and amount > 10000:
         raise ValueError("Max recharge per txn is ₹10,000")
+    if purpose == "company_wallet_recharge":
+        if user.get("role") != "admin" or not user.get("company_id"):
+            raise ValueError("Only a corporate admin can recharge the company wallet")
+        if amount > 100000:
+            raise ValueError("Max company recharge per txn is ₹1,00,000")
 
     # Dedupe: reuse an existing un-paid order for the same billing session.
     if billing_session_id:
@@ -116,6 +121,7 @@ async def create_payment_order(user, purpose, amount=None, expense_draft=None, b
         "id": tid,
         "order_id": order["id"],
         "user_id": user["id"],
+        "company_id": user.get("company_id") if purpose == "company_wallet_recharge" else None,
         "purpose": purpose,
         "amount": amount,
         "amount_paise": amount_paise,
@@ -207,15 +213,16 @@ def bill_fee_kind_for_user(user) -> str:
 
 
 async def bill_fee_for_user(user, total) -> tuple:
-    """Returns (fee_amount_rupees, percent_applied) for this user + expense total.
+    """Return (fee_amount_rupees, percent_applied) for this user + bill total.
 
-    Corporate accounts are on a monthly SUBSCRIPTION -> unlimited bills with NO
-    per-bill convenience fee. Only individual ("simple") users are charged."""
+    Both individual and corporate rates are Super-Admin configurable. Corporate
+    admins and employees use the corporate rate; a 0% rate explicitly waives the
+    per-bill charge. New transactions snapshot the current rate so later setting
+    changes never alter an in-progress/issued bill.
+    """
     kind = bill_fee_kind_for_user(user)
-    if kind == "corporate":
-        return 0.0, 0.0
     percents = await get_bill_fee_percents()
-    pct = percents["individual"]
+    pct = percents[kind]
     try:
         amt = round(float(total or 0) * pct / 100.0, 2)
     except (TypeError, ValueError):
@@ -338,6 +345,32 @@ async def _credit_wallet_once(txn: dict, payment_id: str):
     return round(float((u or {}).get("wallet_balance", 0.0)), 2)
 
 
+async def _credit_company_wallet_once(txn: dict, payment_id: str):
+    """Credit a corporate wallet exactly once after verified Razorpay capture."""
+    doc = await db.payment_orders.find_one_and_update(
+        {"id": txn["id"], "purpose": "company_wallet_recharge", "credited": {"$ne": True}},
+        {"$set": {"credited": True}},
+        return_document=_AFTER,
+    )
+    if not doc:
+        return None
+    cid = doc.get("company_id")
+    if not cid:
+        raise ValueError("Company wallet recharge is missing company_id")
+    amt = float(doc.get("amount") or 0)
+    company = await db.companies.find_one_and_update(
+        {"id": cid}, {"$inc": {"wallet_balance": amt}}, return_document=_AFTER
+    )
+    if not company:
+        raise ValueError("Company not found for wallet recharge")
+    await db.wallet_txns.insert_one({
+        "id": str(uuid.uuid4()), "company_id": cid, "user_id": doc["user_id"],
+        "type": "credit", "amount": amt,
+        "reason": f"Company wallet recharge (Razorpay {payment_id})", "created_at": now_iso(),
+    })
+    return round(float(company.get("wallet_balance", 0.0)), 2)
+
+
 # ---------------- THE reconciler ----------------
 async def reconcile_payment(*, transaction_id=None, order_id=None, payment_id=None,
                             signature=None, source="unknown", amount_paise=None,
@@ -427,6 +460,9 @@ async def reconcile_payment(*, transaction_id=None, order_id=None, payment_id=No
     if purpose == "wallet_recharge":
         bal = await _credit_wallet_once(txn, payment_id)
         result["wallet_balance"] = bal
+    elif purpose == "company_wallet_recharge":
+        bal = await _credit_company_wallet_once(txn, payment_id)
+        result["company_wallet_balance"] = bal
     elif purpose in ("bill", "merchant_payment"):
         eid = await billing_service.ensure_expense_for_transaction(
             await db.payment_orders.find_one({"id": tid}), payment_id

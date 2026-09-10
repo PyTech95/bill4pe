@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import api, { API } from '@/lib/api';
 import { openRazorpay } from '@/lib/razorpay';
 import { useAuth } from '@/lib/auth';
+import { publicWebUrl } from '@/lib/urls';
 
 export default function BillGen() {
   const { id } = useParams();
@@ -37,7 +38,7 @@ export default function BillGen() {
     if (!clientEmail.trim()) { toast.error('Enter client email'); return; }
     setSending(true);
     try {
-      const verify_url = `${window.location.origin}/verify/${expense.bill_id}`;
+      const verify_url = publicWebUrl(`/verify/${expense.bill_id}`);
       await api.post(`/bills/${id}/email`, { recipient_email: clientEmail.trim(), verify_url });
       toast.success(`Invoice emailed to ${clientEmail.trim()}`);
       setEmailOpen(false);

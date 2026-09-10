@@ -15,6 +15,8 @@ export default function PhoneLogin() {
   const [step, setStep] = useState('phone'); // phone | otp
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [demoHint, setDemoHint] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
@@ -38,8 +40,9 @@ export default function PhoneLogin() {
     if (digits.length !== 10) { toast.error('Enter a valid 10-digit number'); return; }
     setLoading(true);
     try {
-      await api.post('/auth/otp/request', { phone: digits, name });
-      toast.success('Demo OTP is 123456');
+      const { data } = await api.post('/auth/otp/request', { phone: digits, name, email: email.trim() || null });
+      setDemoHint(data?.demo_hint || '');
+      toast.success(data?.mode === 'demo' && data?.demo_hint ? data.demo_hint : 'OTP sent successfully');
       setStep('otp');
       setResendIn(30);
     } catch (err) {
@@ -53,7 +56,7 @@ export default function PhoneLogin() {
     try {
       const digits = phone.replace(/\D/g, '').slice(-10);
       const { data } = await api.post('/auth/otp/verify', {
-        phone: digits, otp, name, referrer_code: refMeta ? refCode : null,
+        phone: digits, otp, name, email: email.trim() || null, referrer_code: refMeta ? refCode : null,
       });
       localStorage.setItem('bill4pe_token', data.token);
       localStorage.setItem('bill4pe_user', JSON.stringify(data.user));
@@ -69,11 +72,11 @@ export default function PhoneLogin() {
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
         <Link to="/" className="self-start bg-white inline-flex items-center p-3 rounded-xl">
-          <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
+          <img src="/logo.png?v=7" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Sign in with your phone.</div>
-          <p className="text-white/60 mt-4 max-w-sm">Fastest way in. Demo OTP is <span className="text-lime font-mono">123456</span>.</p>
+          <p className="text-white/60 mt-4 max-w-sm">Secure phone verification for BILL4PE users.</p>
         </div>
         <div className="text-xs text-white/40">© 2026 BILL4PE · www.bill4pe.com</div>
       </div>
@@ -88,7 +91,7 @@ export default function PhoneLogin() {
         </Link>
         <div className="w-full max-w-sm">
           <Link to="/" className="md:hidden mb-8 bg-white inline-flex items-center p-2 rounded-xl">
-            <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
+            <img src="/logo.png?v=7" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
           </Link>
 
           {step === 'phone' && (
@@ -120,6 +123,16 @@ export default function PhoneLogin() {
                     className="mt-1 h-12 rounded-xl border-soft"
                     data-testid="otp-name-input"
                   />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Email (required for first signup)</label>
+                  <Input
+                    type="email" placeholder="you@example.com"
+                    value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 h-12 rounded-xl border-soft"
+                    data-testid="otp-email-input"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Existing phone users may leave this blank.</p>
                 </div>
                 <div>
                   <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile number</label>
@@ -159,9 +172,11 @@ export default function PhoneLogin() {
               <p className="text-sm text-slate-500 mt-1">
                 Sent to <span className="font-mono text-navy font-semibold">+91 {phone}</span>
               </p>
-              <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider bg-lime/30 text-navy px-2 py-1 rounded-full font-bold">
-                <Smartphone className="w-3 h-3" /> Demo mode · OTP is 123456
-              </div>
+              {demoHint && (
+                <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider bg-lime/30 text-navy px-2 py-1 rounded-full font-bold">
+                  <Smartphone className="w-3 h-3" /> {demoHint}
+                </div>
+              )}
 
               <div className="mt-8 flex justify-center">
                 <InputOTP maxLength={6} value={otp} onChange={setOtp} data-testid="otp-input">

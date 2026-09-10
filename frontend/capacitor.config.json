@@ -2,8 +2,10 @@
   "appId": "com.bill4pe.app",
   "appName": "BILL4PE",
   "webDir": "build",
+  "bundledWebRuntime": false,
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
   },
   "plugins": {
     "SplashScreen": {
@@ -15,10 +17,15 @@
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#0A1128"
+      "backgroundColor": "#0A1128",
+      "overlaysWebView": false
     },
     "Keyboard": {
-      "resize": "native"
+      "resize": "native",
+      "resizeOnFullScreen": true
+    },
+    "Camera": {
+      "presentationStyle": "popover"
     }
   }
 }

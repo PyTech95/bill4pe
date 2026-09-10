@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { openRazorpay } from '@/lib/razorpay';
 import { useAuth } from '@/lib/auth';
+import { getCurrentGeo, isNative, pickNativeImage } from '@/lib/native';
 
 const TXN_KEY = 'bill4pe_manual_txn';
 const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
@@ -14,16 +15,9 @@ const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
 // Only these money-sensitive states are worth auto-resuming (the receipt upload
 // step included — we must not lose an in-progress verification). Cancelled/
 // discarded/superseded attempts return 404 and are never resumed.
-const RESUMABLE = ['awaiting_merchant_payment', 'merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending'];
+const RESUMABLE = ['awaiting_merchant_payment', 'merchant_payment_claimed', 'proof_submitted', 'fee_due', 'fee_pending', 'fee_paid', 'generation_failed'];
 
-const captureCurrentLocation = () => new Promise((resolve) => {
-  if (!navigator.geolocation) { resolve(null); return; }
-  navigator.geolocation.getCurrentPosition(
-    (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-    () => resolve(null),
-    { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 },
-  );
-});
+const captureCurrentLocation = () => getCurrentGeo({ timeout: 6000, maximumAge: 30000 });
 
 function CheckRow({ label, value, ok, mono }) {
   return (
@@ -118,8 +112,20 @@ export default function PayNow() {
 
   // Load draft + resume any pending transaction (app-close recovery).
   const refresh = useCallback(async (tid) => {
-    try { const { data } = await api.get(`/manual-pay/${tid}`); setTxn(data); return data; }
-    catch { localStorage.removeItem(TXN_KEY); setTxn(null); return null; }
+    try {
+      const { data } = await api.get(`/manual-pay/${tid}`);
+      setTxn(data);
+      return data;
+    } catch (e) {
+      // A temporary network/server error must never erase the local pointer to a
+      // verified payment. Clear it only when the backend confirms it no longer
+      // exists (404). This keeps post-payment recovery safe across refreshes.
+      if (e?.response?.status === 404) {
+        localStorage.removeItem(TXN_KEY);
+        setTxn(null);
+      }
+      return null;
+    }
   }, []);
 
   useEffect(() => {
@@ -131,27 +137,41 @@ export default function PayNow() {
       if (tid) {
         try {
           const { data } = await api.get(`/manual-pay/${tid}`);
-          if (data && !data.bill_id && RESUMABLE.includes(data.state)) {
-            const currentTotal = d?.items?.reduce((s, i) => s + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
-            if (d && currentTotal > 0 && Math.abs((data.merchant_amount || 0) - currentTotal) > 0.005) {
-              // Bill contents changed since this attempt opened — invalidate the
-              // stale attempt server-side and start fresh with the new bill.
-              api.post(`/manual-pay/${tid}/discard`).catch(() => {});
+          if (data) {
+            const paymentProtected = data.merchant_verification_status === 'verified' || data.merchant_verification_status === 'admin_reviewed' || data.fee_status === 'paid';
+            const currentTotal = d?.items?.reduce((sum, i) => sum + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
+            const amountChanged = d && currentTotal > 0 && Math.abs((data.merchant_amount || 0) - currentTotal) > 0.005;
+
+            if (data.bill_id || data.state === 'completed') {
+              setTxn(data);
+            } else if (RESUMABLE.includes(data.state) || paymentProtected) {
+              if (amountChanged && !paymentProtected) {
+                // Only an UNVERIFIED attempt may be discarded automatically.
+                await api.post(`/manual-pay/${tid}/discard`).catch(() => {});
+                localStorage.removeItem(TXN_KEY);
+                setTxn(null);
+              } else {
+                // Verified payment/paid fee is protected and always resumed, even
+                // if bill generation previously failed. Never make the user pay again.
+                setTxn(data);
+              }
+            } else {
+              if (data.state === 'second_qr_required') await api.post(`/manual-pay/${tid}/cancel`).catch(() => {});
               localStorage.removeItem(TXN_KEY);
               setTxn(null);
-            } else {
-              setTxn(data); // resume the in-progress, money-sensitive payment
             }
           } else {
-            if (data && data.state === 'second_qr_required') {
-              api.post(`/manual-pay/${tid}/cancel`).catch(() => {});
-              localStorage.removeItem(TXN_KEY);
-              setTxn(null);
-            }
             localStorage.removeItem(TXN_KEY);
             setTxn(null);
           }
-        } catch { localStorage.removeItem(TXN_KEY); setTxn(null); }
+        } catch (e) {
+          // Preserve the transaction id on transient failures. A verified/paid
+          // transaction can then be recovered when connectivity returns.
+          if (e?.response?.status === 404) {
+            localStorage.removeItem(TXN_KEY);
+            setTxn(null);
+          }
+        }
       }
       setLoading(false);
     })();
@@ -167,7 +187,11 @@ export default function PayNow() {
   const draftAmount = draft?.items?.reduce((s, i) => s + (Number(i.quantity) || 1) * (Number(i.unit_price) || 0), 0) || 0;
   const verified = txn?.merchant_verification_status === 'verified' || txn?.merchant_verification_status === 'admin_reviewed';
   const feeDue = Number(txn?.platform_fee || needsFee?.fee || 0);
-  const walletBalance = Number(user?.wallet_balance ?? needsFee?.wallet_balance ?? 0);
+  const feeAlreadyPaid = txn?.fee_status === 'paid';
+  const paymentProtected = verified || feeAlreadyPaid;
+  const walletBalance = Number(isCorporate
+    ? (needsFee?.wallet_balance ?? 0)
+    : (user?.wallet_balance ?? needsFee?.wallet_balance ?? 0));
   const walletOk = walletBalance + 1e-9 >= feeDue;
 
   // Pay Now → create the payment attempt and go STRAIGHT to receipt upload.
@@ -219,35 +243,49 @@ export default function PayNow() {
   };
 
   const generate = async (pinOverride = null) => {
-    const feeDue = Number(txn?.platform_fee || needsFee?.fee || 0);
+    const currentFee = Number(txn?.platform_fee || needsFee?.fee || 0);
+    const alreadyPaid = txn?.fee_status === 'paid';
     const pin = String(pinOverride ?? walletPin ?? '').trim();
-    if (!isCorporate && feeDue > 0 && !/^\d{4}$/.test(pin)) {
+    if (!isCorporate && currentFee > 0 && !alreadyPaid && !/^\d{4}$/.test(pin)) {
       toast.error('Enter your 4-digit Wallet PIN');
       return;
     }
     setBusy(true); setNeedsFee(null); setGenError(false);
     try {
-      const payload = (!isCorporate && feeDue > 0) ? { wallet_pin: pin } : {};
+      // Once the fee is paid, retries NEVER ask for PIN/payment again.
+      const payload = (!isCorporate && currentFee > 0 && !alreadyPaid) ? { wallet_pin: pin } : {};
       const { data } = await api.post(`/manual-pay/${txn.transaction_id}/generate`, payload);
       if (data.needs_fee) {
         setNeedsFee(data); setTxn(data);
-        toast.error('Wallet balance is too low — recharge or pay online via Razorpay.');
+        toast.error(isCorporate
+          ? 'Company wallet balance is too low. Ask the company admin to recharge and then retry.'
+          : 'Wallet balance is too low — recharge or pay online via Razorpay.');
         return;
       }
       setTxn(data); setWalletPin(''); await refreshUser();
-      toast.success('Receipt generated ✓');
+      toast.success('Bill generated ✓');
     } catch (e) {
-      setGenError(true);
-      toast.error(e.response?.data?.detail || 'Could not generate receipt');
+      // Re-read authoritative state: backend may have generated the bill even if
+      // the response was interrupted. Never tell a verified user to discard/pay again.
+      const fresh = await refresh(txn.transaction_id);
+      if (fresh?.bill_id) {
+        setGenError(false);
+        toast.success('Bill generated ✓');
+      } else {
+        setGenError(true);
+        toast.error(e.response?.data?.detail || (paymentProtected
+          ? 'Payment is verified and safe. Bill generation can be retried — do not pay again.'
+          : 'Could not generate bill'));
+      }
     } finally { setBusy(false); }
   };
 
-  // Corporate = monthly subscription -> generate the bill AUTOMATICALLY once the
-  // payment is VERIFIED, with no manual "generate" prompt.
+  // Corporate bills auto-attempt generation after payment verification. If a
+  // corporate fee is configured, the backend atomically debits the company wallet.
   useEffect(() => {
     if (!isCorporate) return;
     const state = txn?.state;
-    const ready = verified && (state === 'proof_submitted' || state === 'fee_due' || state === 'fee_pending');
+    const ready = verified && (state === 'proof_submitted' || state === 'fee_due' || state === 'fee_pending' || state === 'fee_paid' || state === 'generation_failed');
     if (ready && !txn?.bill_id && !busy && !autoGenRef.current) {
       autoGenRef.current = true;
       generate();
@@ -267,8 +305,22 @@ export default function PayNow() {
               const { data: v } = await api.post(`/manual-pay/${txn.transaction_id}/fee-verify`, {
                 razorpay_order_id: resp.razorpay_order_id, razorpay_payment_id: resp.razorpay_payment_id, razorpay_signature: resp.razorpay_signature,
               });
-              setTxn(v); setNeedsFee(null); setWalletPin(''); await refreshUser(); toast.success('Fee paid — receipt generated ✓');
-            } catch (e) { toast.error(e.response?.data?.detail || 'Fee verification failed'); }
+              setTxn(v); setNeedsFee(null); setWalletPin(''); await refreshUser();
+              if (v?.bill_id || v?.state === 'completed') {
+                setGenError(false);
+                toast.success('Fee verified — bill generated ✓');
+              } else if (v?.fee_status === 'paid') {
+                setGenError(true);
+                toast.info('Fee is paid and safe. Tap Retry Bill Generation — do not pay again.');
+              } else {
+                toast.success('Fee verified ✓');
+              }
+            } catch (e) {
+              const fresh = await refresh(txn.transaction_id);
+              if (fresh?.bill_id) toast.success('Fee verified — bill generated ✓');
+              else if (fresh?.fee_status === 'paid') { setGenError(true); toast.error('Fee is paid and safe. Tap Retry Bill Generation — do not pay again.'); }
+              else toast.error(e.response?.data?.detail || 'Fee verification failed');
+            }
           },
         },
       );
@@ -317,7 +369,12 @@ export default function PayNow() {
 
   const cancel = async () => {
     if (!txn) { nav('/app/dashboard'); return; }
-    try { await api.post(`/manual-pay/${txn.transaction_id}/discard`); } catch { /* */ }
+    if (paymentProtected) {
+      toast.info('Payment is verified and protected. Finish/retry bill generation later; no new payment is needed.');
+      nav('/app/dashboard');
+      return;
+    }
+    try { await api.post(`/manual-pay/${txn.transaction_id}/discard`); } catch { return; }
     localStorage.removeItem(TXN_KEY); sessionStorage.removeItem('bill4pe_draft');
     autoGenRef.current = false; setGenError(false);
     setTxn(null); nav('/app/dashboard');
@@ -333,9 +390,20 @@ export default function PayNow() {
 
   const st = txn?.state;
 
+  const pickProofNative = async (event) => {
+    if (!isNative() || verifying) return;
+    event?.preventDefault?.();
+    try {
+      const file = await pickNativeImage({ cameraOnly: false });
+      if (file) await uploadProof(file);
+    } catch (err) {
+      if (!String(err?.message || err).toLowerCase().includes('cancel')) toast.error('Could not open camera/photos');
+    }
+  };
+
   const uploadBox = (
     <div>
-      <label className={`flex flex-col items-center justify-center gap-2 text-sm border-2 border-dashed rounded-xl py-8 px-4 text-center cursor-pointer hover:bg-muted/50 ${verifying ? 'opacity-70 pointer-events-none' : ''}`} data-testid="receipt-upload-label">
+      <label onClick={pickProofNative} className={`flex flex-col items-center justify-center gap-2 text-sm border-2 border-dashed rounded-xl py-8 px-4 text-center cursor-pointer hover:bg-muted/50 ${verifying ? 'opacity-70 pointer-events-none' : ''}`} data-testid="receipt-upload-label">
         {verifying ? <Loader2 className="h-6 w-6 animate-spin" /> : <ReceiptText className="h-6 w-6 text-muted-foreground" />}
         <span className="font-medium">{verifying ? 'Reading receipt & verifying payment…' : 'Upload payment receipt / screenshot'}</span>
         <span className="text-xs text-muted-foreground">PhonePe, Paytm, GPay, BHIM or bank app — amount, UTR and payee are read automatically</span>
@@ -348,10 +416,10 @@ export default function PayNow() {
     <div className="max-w-lg mx-auto p-4 space-y-5" data-testid="paynow-page">
       <div className="flex items-center justify-between">
         <button onClick={() => nav(-1)} className="flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
-        {txn && st !== 'completed' && !txn.bill_id && (
-          <div className="flex items-center gap-4">
-            <button onClick={startNew} disabled={busy} className="text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="start-new-payment">Start new payment</button>
-            <button onClick={() => setDiscardOpen(true)} disabled={busy} className="text-sm font-medium text-red-600 hover:text-red-700" data-testid="discard-bill-btn">Discard Bill &amp; Start New</button>
+        {txn && st !== 'completed' && !txn.bill_id && !paymentProtected && (
+          <div className="flex items-center justify-end gap-x-3 gap-y-2 flex-wrap">
+            <button onClick={startNew} disabled={busy} className="text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="start-new-payment">Start new payment</button>
+            <button onClick={() => setDiscardOpen(true)} disabled={busy} className="text-xs sm:text-sm font-medium text-red-600 hover:text-red-700" data-testid="discard-bill-btn">Discard Bill &amp; Start New</button>
           </div>
         )}
       </div>
@@ -394,7 +462,7 @@ export default function PayNow() {
       )}
 
       {/* STEP 4 — verification result → fee / generate receipt */}
-      {(st === 'proof_submitted' || st === 'fee_due' || st === 'fee_pending') && (
+      {(st === 'proof_submitted' || st === 'fee_due' || st === 'fee_pending' || st === 'fee_paid' || st === 'generation_failed') && (
         <div className="space-y-4" data-testid="generate-screen">
           {txn.verification && <VerificationCard v={txn.verification} billAmount={txn.merchant_amount} />}
           {!verified ? (
@@ -407,28 +475,44 @@ export default function PayNow() {
           ) : (
             <>
               <div className="rounded-xl border p-4 bg-emerald-50 text-emerald-800 text-sm flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5" /> Payment verified — <b>receipt matched</b>
+                <CheckCircle2 className="h-5 w-5" /> Payment verified and protected — <b>do not pay again</b>
               </div>
               <div className="rounded-xl border p-4 text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-muted-foreground">Merchant amount</span><span className="font-mono">{money(txn.merchant_amount)}</span></div>
-                {isCorporate ? (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Bill Generation Charges</span><span className="font-mono text-emerald-700 font-semibold">Free · Subscription</span></div>
-                ) : (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Bill Generation Charges (@ {txn.platform_fee_percent}% of billed amount)</span><span className="font-mono">{money(txn.platform_fee)}</span></div>
-                )}
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Bill Generation Charges (@ {txn.platform_fee_percent}% of billed amount)</span>
+                  <span className="font-mono">{money(txn.platform_fee)}</span>
+                </div>
               </div>
               {isCorporate ? (
-                genError ? (
+                needsFee?.needs_fee ? (
+                  <div className="rounded-xl border p-4 space-y-3 bg-amber-50/60" data-testid="company-wallet-short">
+                    <div className="text-sm text-amber-800 flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                      Company wallet is short. Required charge: <b>{money(feeDue)}</b>; available: <b>{money(needsFee.wallet_balance)}</b>. Payment receipt is already verified and protected.
+                    </div>
+                    {user?.role === 'admin' ? (
+                      <Button className="w-full" variant="outline" onClick={() => nav('/app/company')} data-testid="go-company-wallet-btn">Recharge Company Wallet</Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center">Ask your company admin to recharge the company wallet, then return here and tap Retry.</p>
+                    )}
+                    <Button className="w-full" disabled={busy} onClick={() => { autoGenRef.current = false; generate(); }} data-testid="retry-company-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry Bill Generation'}</Button>
+                  </div>
+                ) : genError ? (
                   <div className="rounded-xl border p-4 space-y-3" data-testid="auto-generate-error">
-                    <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Couldn't generate the bill. Please retry.</div>
-                    <Button className="w-full" disabled={busy} onClick={generate} data-testid="retry-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry'}</Button>
+                    <div className="flex items-center gap-2 text-amber-700 text-sm"><AlertTriangle className="h-4 w-4" /> Payment is safe. Bill generation did not finish; please retry — no new merchant payment is required.</div>
+                    <Button className="w-full" disabled={busy} onClick={() => { autoGenRef.current = false; generate(); }} data-testid="retry-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry Bill Generation'}</Button>
                   </div>
                 ) : (
                   <div className="rounded-xl border p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="auto-generating-bill">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Generating your bill automatically…
+                    <Loader2 className="h-4 w-4 animate-spin" /> Verifying company wallet &amp; generating your bill…
                   </div>
                 )
-              ) : (feeDue <= 0 ? (
+              ) : (feeAlreadyPaid ? (
+                <div className="rounded-xl border p-4 space-y-3 bg-amber-50/60" data-testid="paid-fee-retry-box">
+                  <div className="text-sm text-amber-800 flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" /> Bill Generation Charges are already paid. Retry only bill generation — you will not be charged again.</div>
+                  <Button className="w-full" disabled={busy} onClick={() => generate()} data-testid="retry-paid-generate-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry Bill Generation'}</Button>
+                </div>
+              ) : feeDue <= 0 ? (
                 <Button className="w-full" disabled={busy} onClick={() => generate()} data-testid="generate-receipt-btn">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate Bill4Pe digital receipt'}</Button>
               ) : (
                 <div className="rounded-xl border p-4 space-y-4" data-testid="fee-payment-box">
@@ -500,7 +584,7 @@ export default function PayNow() {
           <div className="relative bg-background rounded-xl border p-5 w-full max-w-sm space-y-4" data-testid="discard-confirm-modal">
             <div>
               <h3 className="font-semibold text-lg">Discard this bill?</h3>
-              <p className="text-sm text-muted-foreground mt-1">This will cancel the current bill and payment attempt. You can create a new bill after this.</p>
+              <p className="text-sm text-muted-foreground mt-1">This is available only before payment is verified. Verified payments are protected and must be completed, not discarded.</p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setDiscardOpen(false)} data-testid="discard-keep-btn">Keep Bill</Button>

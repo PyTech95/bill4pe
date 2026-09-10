@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { catByKey } from '@/lib/categories';
 import api from '@/lib/api';
+import { getCurrentGeo, isNative, pickNativeImage } from '@/lib/native';
 
 const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
 
@@ -137,20 +138,11 @@ export default function SubCategory() {
   };
 
   // Capture geolocation (callable + auto on mount)
-  const captureLocation = () => {
-    if (!navigator.geolocation) {
-      setGeo({ lat: null, lng: null, status: 'unsupported' });
-      return;
-    }
+  const captureLocation = async () => {
     setGeo((g) => ({ ...g, status: 'loading' }));
-    navigator.geolocation.getCurrentPosition(
-      (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude, status: 'ok' }),
-      (err) => {
-        const denied = err && err.code === 1;
-        setGeo({ lat: null, lng: null, status: denied ? 'denied' : 'error' });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-    );
+    const p = await getCurrentGeo({ timeout: 10000, maximumAge: 30000 });
+    if (p) setGeo({ lat: p.lat, lng: p.lng, status: 'ok' });
+    else setGeo({ lat: null, lng: null, status: 'denied' });
   };
 
   // Auto-capture location on first render
@@ -172,8 +164,7 @@ export default function SubCategory() {
   );
 
   // AI scan
-  const onAiFile = async (e) => {
-    const file = e.target.files?.[0];
+  const processAiFile = async (file) => {
     if (!file) return;
     setPreview(URL.createObjectURL(file));
     setAiScanning(true);
@@ -197,6 +188,25 @@ export default function SubCategory() {
       setAiScanning(false);
       setTimeout(() => setAiOpen(false), 700);
     }
+  };
+
+  const openAiCamera = async () => {
+    if (isNative()) {
+      try {
+        const file = await pickNativeImage({ cameraOnly: true });
+        if (file) await processAiFile(file);
+      } catch (err) {
+        if (!String(err?.message || err).toLowerCase().includes('cancel')) toast.error('Could not open camera');
+      }
+      return;
+    }
+    fileRef.current?.click();
+  };
+
+  const onAiFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await processAiFile(file);
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const proceed = () => {
@@ -313,7 +323,7 @@ export default function SubCategory() {
       <motion.button
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -2 }}
-        onClick={() => fileRef.current?.click()}
+        onClick={openAiCamera}
         data-testid="ai-photo-capture-btn"
         className="press-down relative w-full overflow-hidden rounded-3xl bg-navy text-white p-5 text-left group"
       >
@@ -417,7 +427,7 @@ export default function SubCategory() {
               </button>
             )}
             <button
-              onClick={() => fileRef.current?.click()}
+              onClick={openAiCamera}
               data-testid="ai-scan-btn"
               className="press-down inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-lime text-navy px-2 py-1 rounded-full"
             >

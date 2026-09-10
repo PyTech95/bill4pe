@@ -20,11 +20,11 @@ router = APIRouter(tags=["payments"])
 
 class LegacyOrderReq(BaseModel):
     amount: float
-    purpose: Literal["wallet_recharge", "bill", "bill_fee", "merchant_payment"] = "wallet_recharge"
+    purpose: Literal["wallet_recharge", "company_wallet_recharge", "bill", "bill_fee", "merchant_payment"] = "wallet_recharge"
 
 
 class CreateOrderReq(BaseModel):
-    purpose: Literal["wallet_recharge", "bill", "bill_fee", "merchant_payment"] = "merchant_payment"
+    purpose: Literal["wallet_recharge", "company_wallet_recharge", "bill", "bill_fee", "merchant_payment"] = "merchant_payment"
     amount: Optional[float] = None
     expense_draft: Optional[dict[str, Any]] = None
     billing_session_id: Optional[str] = None
@@ -143,8 +143,29 @@ async def legacy_create_order(body: LegacyOrderReq, user=Depends(get_current_use
     }
 
 
+async def _owned_payment_or_404(user, *, transaction_id: str | None = None, order_id: str | None = None):
+    """Never let an authenticated user verify/reconcile another user's checkout."""
+    q = {"user_id": user["id"]}
+    if transaction_id:
+        q["id"] = transaction_id
+    elif order_id:
+        q["order_id"] = order_id
+    else:
+        raise HTTPException(400, "Payment reference is required")
+    txn = await db.payment_orders.find_one(q, {"_id": 0, "id": 1, "order_id": 1})
+    if not txn:
+        raise HTTPException(404, "Payment order not found")
+    return txn
+
+
 @router.post("/payments/verify")
 async def verify_payment(body: VerifyReq, user=Depends(get_current_user)):
+    # Ownership is checked BEFORE reconciliation; checkout signatures prove Razorpay
+    # authenticity, not that the current BILL4PE user owns this order.
+    if body.transaction_id:
+        await _owned_payment_or_404(user, transaction_id=body.transaction_id)
+    else:
+        await _owned_payment_or_404(user, order_id=body.razorpay_order_id)
     res = await payment_service.reconcile_payment(
         transaction_id=body.transaction_id,
         order_id=body.razorpay_order_id,
@@ -161,6 +182,7 @@ async def verify_payment(body: VerifyReq, user=Depends(get_current_user)):
 
 @router.post("/payments/razorpay/verify")
 async def legacy_verify(body: LegacyVerifyReq, user=Depends(get_current_user)):
+    await _owned_payment_or_404(user, order_id=body.razorpay_order_id)
     res = await payment_service.reconcile_payment(
         order_id=body.razorpay_order_id,
         payment_id=body.razorpay_payment_id,

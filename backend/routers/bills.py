@@ -92,7 +92,7 @@ async def generate_bill(eid: str, body: Optional[GenerateReq] = None, user=Depen
         razorpay_ok = True
         fee_paid_via = "razorpay"
 
-    if user.get("role") == "employee" and user.get("company_id"):
+    if user.get("user_type") == "corporate" and user.get("company_id"):
         company = await db.companies.find_one({"id": user["company_id"]})
         if not company:
             raise HTTPException(404, "Company not found")
@@ -104,15 +104,16 @@ async def generate_bill(eid: str, body: Optional[GenerateReq] = None, user=Depen
             )
         new_bal = round(bal - fee, 2)
         await db.companies.update_one({"id": company["id"]}, {"$set": {"wallet_balance": new_bal}})
-        await db.wallet_txns.insert_one({
-            "id": str(uuid.uuid4()),
-            "company_id": company["id"],
-            "user_id": user["id"],
-            "type": "debit",
-            "amount": fee,
-            "reason": f"Bill generation by {user.get('name')}: {bill_id}",
-            "created_at": now_iso(),
-        })
+        if fee > 0:
+            await db.wallet_txns.insert_one({
+                "id": str(uuid.uuid4()),
+                "company_id": company["id"],
+                "user_id": user["id"],
+                "type": "debit",
+                "amount": fee,
+                "reason": f"Bill generation by {user.get('name')}: {bill_id}",
+                "created_at": now_iso(),
+            })
     else:
         u = await db.users.find_one({"id": user["id"]})
         bal = float(u.get("wallet_balance", 0.0))
@@ -148,13 +149,10 @@ async def generate_bill(eid: str, body: Optional[GenerateReq] = None, user=Depen
 
 @router.get("/bills/fee-info")
 async def bill_fee_info(user=Depends(get_current_user)):
-    """The bill-generation fee % that applies to the CURRENT user (for display
-    before generation). Corporate accounts are on a subscription -> 0% per bill."""
+    """The Super-Admin-configured bill-generation fee for the current user type."""
     kind = payment_service.bill_fee_kind_for_user(user)
-    if kind == "corporate":
-        return {"kind": kind, "percent": 0.0}
     percents = await payment_service.get_bill_fee_percents()
-    return {"kind": kind, "percent": percents["individual"]}
+    return {"kind": kind, "percent": percents[kind]}
 
 
 @router.get("/bills/{eid}/pdf")

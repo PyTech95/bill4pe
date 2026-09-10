@@ -24,7 +24,13 @@ DB_NAME = os.environ["DB_NAME"]
 # Fail fast in production: a missing/weak signing secret must never silently
 # fall back to a shared default for a billing app.
 JWT_SECRET = os.environ["JWT_SECRET"]
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
+# Capacitor native WebViews use local origins. Keep them allowed whenever CORS
+# is explicitly restricted so Android/iOS can call the same production API.
+if "*" not in CORS_ORIGINS:
+    for _native_origin in ("https://localhost", "capacitor://localhost"):
+        if _native_origin not in CORS_ORIGINS:
+            CORS_ORIGINS.append(_native_origin)
 
 # Active payment flow. "manual_upi_double_scan" = customer pays merchant directly
 # in their own UPI app (double QR scan + proof); Bill4Pe only collects the fee.
@@ -38,9 +44,6 @@ PAYMENT_FLOW_MODE = os.environ.get("PAYMENT_FLOW_MODE", "manual_upi_double_scan"
 # ----------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# EMERGENT_LLM_KEY is an OPTIONAL fallback for the Emergent preview environment.
-# It routes to Gemini and introduces no OpenAI dependency. Not required in prod.
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 
 # Gemini model names – override via env if needed.
 # `gemini-flash-latest` is Google's always-current Flash alias (vision + text +
@@ -106,7 +109,7 @@ def compute_fee_breakdown(merchant_amount_paise: int, fee_percent) -> dict:
 BILL_FEE_PERCENT = 0.01   # 1% of expense total (LEGACY reimbursement fee)
 BILL_FEE_MIN = 1.0        # Minimum convenience fee (₹)
 REFERRAL_BONUS = 50.0
-DEMO_OTP = "123456"
+DEMO_OTP = os.environ.get("DEMO_OTP", "123456")
 FAV_ALLOWED_CATEGORIES = {"pantry", "grocery"}
 FAV_MAX_PER_CATEGORY = 20
 

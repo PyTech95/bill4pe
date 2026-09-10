@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { isNative } from '@/lib/native';
 import './App.css';
 
 import Landing from '@/pages/Landing';
@@ -12,6 +13,7 @@ import Contact from '@/pages/Contact';
 import Verify from '@/pages/Verify';
 import Login from '@/pages/auth/Login';
 import PhoneLogin from '@/pages/auth/PhoneLogin';
+import EmployeeLogin from '@/pages/auth/EmployeeLogin';
 import Register from '@/pages/auth/Register';
 import AcceptInvite from '@/pages/auth/AcceptInvite';
 import SuperAdminLogin from '@/pages/auth/SuperAdminLogin';
@@ -35,6 +37,13 @@ import CompanyDashboard from '@/pages/app/CompanyDashboard';
 import WalletPinSetup from '@/pages/app/WalletPinSetup';
 import AppShell from '@/components/AppShell';
 
+
+const RootEntry = () => {
+  const { user } = useAuth();
+  if (!isNative()) return <Landing />;
+  return <Navigate to={user ? '/app' : '/login'} replace />;
+};
+
 const Private = ({ children }) => {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
@@ -43,7 +52,7 @@ const Private = ({ children }) => {
 const AppAccess = ({ children }) => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.wallet_pin_set) return <Navigate to="/wallet-pin" replace />;
+  if (user.user_type !== 'corporate' && !user.wallet_pin_set) return <Navigate to="/wallet-pin" replace />;
   return children;
 };
 
@@ -60,7 +69,7 @@ function App() {
       <BrowserRouter>
         <Toaster position="top-center" richColors />
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<RootEntry />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/disclaimer" element={<Disclaimer />} />
@@ -68,6 +77,7 @@ function App() {
           <Route path="/verify/:billId" element={<Verify />} />
           <Route path="/login" element={<Login />} />
           <Route path="/login/phone" element={<PhoneLogin />} />
+          <Route path="/login/employee" element={<EmployeeLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/wallet-pin" element={<Private><WalletPinSetup /></Private>} />
           <Route path="/accept-invite" element={<AcceptInvite />} />

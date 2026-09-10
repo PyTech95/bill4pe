@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { catByKey } from '@/lib/categories';
 import api from '@/lib/api';
+import { getCurrentGeo } from '@/lib/native';
 
 // Map sub-category → merchant nature of business (printed on bill)
 const TRAVEL_NATURE = {
@@ -68,28 +69,19 @@ export default function TravelSubCategory() {
   const recStreamRef = useRef(null);
   const fromAutoFilledRef = useRef(false);
 
-  const capturePickup = () => {
-    if (!navigator.geolocation) { setPickup({ lat: null, lng: null, status: 'unsupported' }); return; }
+  const capturePickup = async () => {
     setPickup((g) => ({ ...g, status: 'loading' }));
-    navigator.geolocation.getCurrentPosition(
-      async (p) => {
-        const lat = p.coords.latitude, lng = p.coords.longitude;
-        setPickup({ lat, lng, status: 'ok' });
-        // Auto-fill "From" if user hasn't typed anything
-        if (!fromAutoFilledRef.current) {
-          const place = await reverseGeocode(lat, lng);
-          if (place) {
-            setFromText((cur) => cur ? cur : place);
-            fromAutoFilledRef.current = true;
-          }
-        }
-      },
-      (err) => {
-        const denied = err && err.code === 1;
-        setPickup({ lat: null, lng: null, status: denied ? 'denied' : 'error' });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    const p = await getCurrentGeo({ timeout: 10000, maximumAge: 60000 });
+    if (!p) { setPickup({ lat: null, lng: null, status: 'denied' }); return; }
+    const lat = p.lat, lng = p.lng;
+    setPickup({ lat, lng, status: 'ok' });
+    if (!fromAutoFilledRef.current) {
+      const place = await reverseGeocode(lat, lng);
+      if (place) {
+        setFromText((cur) => cur ? cur : place);
+        fromAutoFilledRef.current = true;
+      }
+    }
   };
 
   useEffect(() => { capturePickup(); /* eslint-disable-next-line */ }, []);
@@ -119,12 +111,9 @@ export default function TravelSubCategory() {
       }));
       nav('/app/pay');
     };
-    if (!navigator.geolocation) { finish(null); return; }
-    navigator.geolocation.getCurrentPosition(
-      (p) => finish({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => finish(null),
-      { enableHighAccuracy: true, timeout: 7000, maximumAge: 30000 }
-    );
+    getCurrentGeo({ timeout: 7000, maximumAge: 30000 })
+      .then((p) => finish(p ? { lat: p.lat, lng: p.lng } : null))
+      .catch(() => finish(null));
   };
 
   // -------- Notes voice recording --------

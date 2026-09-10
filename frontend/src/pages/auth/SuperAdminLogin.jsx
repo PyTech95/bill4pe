@@ -39,7 +39,7 @@ export default function SuperAdminLogin() {
           }}
         />
         <Link to="/" className="relative self-start bg-white inline-flex items-center p-3 rounded-xl">
-          <img src="/logo.png?v=6" alt="Bil4Pe" className="h-20 w-auto object-contain" />
+          <img src="/logo.png?v=7" alt="Bil4Pe" className="h-20 w-auto object-contain" />
         </Link>
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand/20 border border-brand/40 text-xs uppercase tracking-[0.2em] font-semibold mb-5">

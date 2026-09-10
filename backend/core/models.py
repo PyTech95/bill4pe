@@ -22,13 +22,20 @@ class LoginReq(BaseModel):
 class OtpRequestReq(BaseModel):
     phone: str
     name: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class OtpVerifyReq(BaseModel):
     phone: str
     otp: str
     name: Optional[str] = None
+    email: Optional[EmailStr] = None
     referrer_code: Optional[str] = None
+
+
+class EmployeeLoginReq(BaseModel):
+    employee_code: str
+    pin: str
 
 
 class User(BaseModel):

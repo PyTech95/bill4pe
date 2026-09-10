@@ -99,8 +99,10 @@ async def init_payments_subsystem():
         await payment_service.ensure_indexes()
         await payout_service.ensure_indexes()
         from services import manual_flow_service, payment_proof_storage
+        from routers import company as company_module
         await manual_flow_service.ensure_indexes()
         await payment_proof_storage.ensure_indexes()
+        await company_module.ensure_employee_codes()
         # Best-effort migration: if the previous deployment still has legacy
         # payment_proofs files, copy them into MongoDB before the folder is retired.
         await payment_proof_storage.migrate_legacy_files_to_mongodb()

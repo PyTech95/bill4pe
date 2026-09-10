@@ -76,12 +76,14 @@ export default function SuperAdminDashboard() {
 
   const saveFees = async () => {
     const ind = Number(feeForm.individual);
+    const corp = Number(feeForm.corporate);
     if (!Number.isFinite(ind) || ind < 0 || ind > 100) return toast.error('Individual % must be between 0 and 100');
+    if (!Number.isFinite(corp) || corp < 0 || corp > 100) return toast.error('Corporate % must be between 0 and 100');
     setSavingFees(true);
     try {
-      const { data } = await api.put('/superadmin/bill-fees', { individual: ind });
-      setFeeForm((f) => ({ ...f, individual: String(data.individual) }));
-      toast.success('Individual bill fee updated');
+      const { data } = await api.put('/superadmin/bill-fees', { individual: ind, corporate: corp });
+      setFeeForm({ individual: String(data.individual), corporate: String(data.corporate) });
+      toast.success('Bill generation charges updated for Individual and Corporate users');
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Failed to update fee');
     } finally { setSavingFees(false); }
@@ -379,9 +381,9 @@ export default function SuperAdminDashboard() {
                 <div>
                   <div className="font-display font-bold text-navy text-lg">Bill generation fee</div>
                   <div className="text-xs text-slate-500">
-                    The Bill Generation Charges applied to individual users when they generate a
-                    bill. Corporate accounts are on a subscription (no per-bill fee).
-                    Changes apply immediately to new bills.
+                    Set separate Bill Generation Charges for Individual and Corporate users.
+                    Corporate employees use the Corporate rate and the charge is deducted from the company wallet.
+                    Changes apply to new billing attempts; in-progress payments keep their snapshotted rate.
                   </div>
                 </div>
               </div>
@@ -403,20 +405,22 @@ export default function SuperAdminDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                <div className="rounded-xl border border-slate-200 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-navy">
-                    <Building2 className="w-4 h-4 text-slate-400" /> Corporate users
+                    <Building2 className="w-4 h-4 text-slate-400" /> Corporate users / employees
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">
-                      Subscription
-                    </span>
-                    <span className="font-mono text-lg text-navy">₹0</span>
-                    <span className="text-xs text-slate-500">/ bill</span>
+                  <div className="relative mt-3">
+                    <Input
+                      type="number" min="0" max="100" step="0.1"
+                      value={feeForm.corporate}
+                      onChange={(e) => setFeeForm({ ...feeForm, corporate: e.target.value })}
+                      className="h-12 rounded-xl pr-9 font-mono text-lg"
+                      data-testid="fee-corporate-input"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">%</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2 leading-snug">
-                    Companies pay a monthly subscription — employees generate
-                    <b> unlimited</b> bills with <b>no per-bill Bill Generation Charges</b>.
+                    Applied to corporate admin and employee bills. The amount is charged to the central company wallet. Set 0% to waive it.
                   </p>
                 </div>
               </div>
@@ -431,8 +435,7 @@ export default function SuperAdminDashboard() {
                 {savingFees ? 'Saving...' : 'Save fee settings'}
               </Button>
               <p className="text-[11px] text-slate-400 mt-3">
-                A minimum fee of ₹1 applies to any non-zero individual rate. Set the rate
-                to 0% to waive the fee for individual users too.
+                A minimum charge of ₹1 applies to any non-zero rate. Set either rate to 0% to waive that user type.
               </p>
             </div>
           </motion.div>

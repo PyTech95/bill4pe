@@ -8,7 +8,7 @@ from core.config import DEMO_OTP, logger
 from core.db import db
 from core.models import (
     RegisterReq, LoginReq, ProfileUpdate, PasswordChange,
-    OtpRequestReq, OtpVerifyReq,
+    OtpRequestReq, OtpVerifyReq, EmployeeLoginReq,
 )
 from core.security import (
     get_current_user, hash_pw, check_pw, make_token, now_iso,
@@ -138,7 +138,7 @@ async def delete_account(user=Depends(get_current_user)):
     return {"ok": True}
 
 
-# ---- Phone OTP (demo mode — universal OTP 123456) ----
+# ---- Phone OTP (MSG91 live mode or explicit development demo mode) ----
 
 def _norm_phone(p: str) -> str:
     return "".join(c for c in (p or "") if c.isdigit())[-10:]
@@ -149,8 +149,22 @@ async def otp_request(body: OtpRequestReq):
     phone = _norm_phone(body.phone)
     if len(phone) != 10:
         raise HTTPException(400, "Invalid 10-digit phone number")
-    logger.info(f"OTP requested for +91{phone}. Demo OTP: {DEMO_OTP}")
-    return {"ok": True, "demo_hint": "Use OTP 123456 for any number (demo mode)"}
+
+    # Production/live OTP requires a real email for first-time signup. Demo mode
+    # stays backwards-compatible for local automated testing only.
+    from services.otp import send_otp, is_demo
+    existing = await db.users.find_one({"phone": f"+91{phone}"})
+    if not existing and not body.email and not is_demo():
+        raise HTTPException(400, "Email is required for first-time phone signup")
+    if not existing and body.email:
+        by_email = await db.users.find_one({"email": str(body.email).lower()})
+        if by_email:
+            raise HTTPException(400, "This email already has an account. Sign in with email and add/verify your phone from Profile.")
+
+    try:
+        return await send_otp(phone)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
 
 
 @router.post("/auth/otp/verify")
@@ -158,22 +172,39 @@ async def otp_verify(body: OtpVerifyReq):
     phone = _norm_phone(body.phone)
     if len(phone) != 10:
         raise HTTPException(400, "Invalid phone number")
-    if (body.otp or "").strip() != DEMO_OTP:
+    if len((body.otp or "").strip()) != 6 or not (body.otp or "").strip().isdigit():
         raise HTTPException(401, "Invalid OTP")
-    fake_email = f"+91{phone}@phone.bill4pe.local"
-    user = await db.users.find_one({"email": fake_email})
+
+    from services.otp import verify_otp, is_demo
+    try:
+        valid = await verify_otp(phone, body.otp)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    if not valid:
+        raise HTTPException(401, "Invalid or expired OTP")
+
+    user = await db.users.find_one({"phone": f"+91{phone}"})
     is_new = user is None
     if is_new:
+        if not body.email and not is_demo():
+            raise HTTPException(400, "Email is required for first-time phone signup")
+        email = str(body.email).lower() if body.email else f"dev-{phone}@phone.bill4pe.local"
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(400, "Email already registered")
         uid = str(uuid.uuid4())
         user_doc = {
             "id": uid,
-            "email": fake_email,
+            "email": email,
             "phone": f"+91{phone}",
-            "name": (body.name or f"User {phone[-4:]}"),
+            "phone_verified": True,
+            "name": (body.name or f"User {phone[-4:]}").strip(),
             "password": hash_pw(str(uuid.uuid4())),
             "wallet_balance": 50.0,
             "wallet_pin_set": False,
             "auth_provider": "phone",
+            "user_type": "individual",
+            "role": "individual",
+            "company_id": None,
             "created_at": now_iso(),
         }
         await db.users.insert_one(user_doc)
@@ -184,11 +215,34 @@ async def otp_verify(body: OtpVerifyReq):
         await apply_referral(uid, body.referrer_code)
         await ensure_referral_code(uid)
         user = await db.users.find_one({"id": uid})
+    else:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"phone_verified": True}})
+        user = await db.users.find_one({"id": user["id"]})
+
     token = make_token(user["id"])
-    return {"token": token, "user": {
-        "id": user["id"], "email": user["email"], "name": user["name"],
-        "phone": user.get("phone"),
-        "wallet_balance": user.get("wallet_balance", 0.0),
-        "wallet_pin_set": bool(user.get("wallet_pin_set")),
-        "referral_code": user.get("referral_code"),
-    }}
+    fresh = await db.users.find_one(
+        {"id": user["id"]}, {"_id": 0, "password": 0, "wallet_pin_hash": 0}
+    )
+    return {"token": token, "user": fresh}
+
+
+@router.post("/auth/employee-login")
+async def employee_login(body: EmployeeLoginReq):
+    """Corporate employee login using a memorable 6-digit employee code + 6-digit PIN.
+
+    Email/password login remains available for backwards compatibility.
+    """
+    code = "".join(c for c in (body.employee_code or "") if c.isdigit())
+    pin = (body.pin or "").strip()
+    if len(code) != 6 or len(pin) != 6 or not pin.isdigit():
+        raise HTTPException(401, "Enter a valid 6-digit employee code and 6-digit PIN")
+    user = await db.users.find_one({
+        "employee_code": code, "role": "employee", "user_type": "corporate",
+    })
+    if not user or user.get("is_active", True) is False or not user.get("password") or not check_pw(pin, user["password"]):
+        raise HTTPException(401, "Invalid employee code or PIN")
+    token = make_token(user["id"])
+    fresh = await db.users.find_one(
+        {"id": user["id"]}, {"_id": 0, "password": 0, "wallet_pin_hash": 0}
+    )
+    return {"token": token, "user": fresh}

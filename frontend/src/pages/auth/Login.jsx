@@ -33,7 +33,7 @@ export default function Login() {
     <div className="min-h-screen bg-navy text-white grid md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-12">
         <Link to="/" className="self-start bg-white inline-flex items-center p-3 rounded-xl">
-          <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
+          <img src="/logo.png?v=7" alt="Bil4Pe — The Intelligent Billing" className="h-20 w-auto object-contain" />
         </Link>
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Welcome back.</div>
@@ -52,7 +52,7 @@ export default function Login() {
         </Link>
         <form onSubmit={submit} className="w-full max-w-sm">
           <Link to="/" className="md:hidden mb-10 bg-white inline-flex items-center p-2 rounded-xl">
-            <img src="/logo.png?v=6" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
+            <img src="/logo.png?v=7" alt="Bil4Pe — The Intelligent Billing" className="h-16 w-auto object-contain" />
           </Link>
           <h1 className="font-display font-bold text-3xl">Sign in</h1>
           <p className="text-sm text-slate-500 mt-1">Use your registered email and password.</p>
@@ -91,6 +91,11 @@ export default function Login() {
             <div>
               <Link to="/login/phone" className="text-navy font-semibold underline" data-testid="link-phone-login">
                 Sign in with phone instead
+              </Link>
+            </div>
+            <div>
+              <Link to="/login/employee" className="text-navy font-semibold underline" data-testid="link-employee-login">
+                Corporate employee? Use 6-digit code
               </Link>
             </div>
             <div>
