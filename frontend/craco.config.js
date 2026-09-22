@@ -90,6 +90,15 @@ let webpackConfig = {
     },
     configure: (webpackConfig) => {
 
+      // Serve the PDF worker with standard JavaScript MIME types.
+      const assetRules = webpackConfig.module.rules.find(rule => Array.isArray(rule.oneOf));
+      if (!assetRules) throw new Error('Webpack asset rules were not found');
+      assetRules.oneOf.unshift({
+        test: /[\\/]pdfjs-dist[\\/].*pdf\.worker(?:\.min)?\.mjs$/,
+        type: 'asset/resource',
+        generator: { filename: 'static/js/[name].[contenthash:8].js' },
+      });
+
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
           ...webpackConfig.watchOptions,
