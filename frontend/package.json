@@ -6,6 +6,8 @@
     "@capacitor/app": "^7",
     "@capacitor/camera": "^7",
     "@capacitor/core": "^7",
+    "@capacitor/filesystem": "7.1.8",
+    "@capacitor/share": "7.0.4",
     "@capacitor/keyboard": "^7",
     "@capacitor/preferences": "^7",
     "@capacitor/splash-screen": "^7",
@@ -56,6 +58,7 @@
     "lodash": "4.18.1",
     "lucide-react": "0.516.0",
     "next-themes": "0.4.6",
+    "pdfjs-dist": "4.10.38",
     "react": "19.0.0",
     "react-day-picker": "8.10.1",
     "react-dom": "19.0.0",
@@ -113,6 +116,8 @@
     "eslint-plugin-react-hooks": "5.2.0",
     "globals": "15.15.0",
     "postcss": "8.5.10",
+    "plist": "3.1.1",
+    "xcode": "3.0.1",
     "tailwindcss": "3.4.17"
   },
   "resolutions": {

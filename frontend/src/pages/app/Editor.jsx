@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ArrowRight, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { catByKey } from '@/lib/categories';
 
-const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
+const emptyItem = () => ({ name: '', quantity: 1, unit_price: '' });
 
 export default function Editor() {
   const nav = useNavigate();
@@ -114,8 +115,9 @@ export default function Editor() {
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Price ₹</label>
-                <Input
+                <AmountInput
                   type="number" min="0" step="0.01" value={it.unit_price}
+                  placeholder="0"
                   onChange={(e) => update(idx, { unit_price: e.target.value })}
                   className="h-10 mt-1 font-mono rounded-lg border-soft"
                   data-testid={`item-price-${idx}`}

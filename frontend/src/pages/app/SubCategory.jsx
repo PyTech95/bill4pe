@@ -6,6 +6,7 @@ import {
   Sparkles, X, RefreshCw, Mic, Square, StickyNote, Star, BookmarkPlus,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +17,7 @@ import { catByKey } from '@/lib/categories';
 import api from '@/lib/api';
 import { getCurrentGeo, isNative, pickNativeImage } from '@/lib/native';
 
-const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0 });
+const emptyItem = () => ({ name: '', quantity: 1, unit_price: '' });
 
 // Per-category item placeholder for the manual items table
 const ITEM_PLACEHOLDER = {
@@ -466,7 +467,7 @@ export default function SubCategory() {
                 />
               </div>
               <div className="col-span-3">
-                <Input
+                <AmountInput
                   type="number" min="0" step="0.01"
                   value={it.unit_price}
                   onChange={(e) => updateItem(idx, { unit_price: e.target.value })}

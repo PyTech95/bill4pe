@@ -1,5 +1,8 @@
 """Bill PDF generation and download."""
 import io
+import base64
+import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -15,7 +18,7 @@ from core.security import bearer, get_current_user, now_iso, check_pw
 from services.pdf import build_pdf_bytes
 from services.email import build_invoice_html, send_email, has_email
 from services import payment_service
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 import os
 import razorpay
 
@@ -187,24 +190,31 @@ async def get_bill_pdf(eid: str, token: Optional[str] = None, creds: HTTPAuthori
 class EmailBillReq(BaseModel):
     recipient_email: EmailStr
     verify_url: Optional[str] = None
-    note: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 
 @router.post("/bills/{eid}/email")
 async def email_bill(eid: str, body: EmailBillReq, user=Depends(get_current_user)):
-    if not has_email():
-        raise HTTPException(503, "Email is not configured (EMERGENT_EMAIL_KEY)")
     exp = await db.expenses.find_one({"id": eid, "user_id": user["id"]}, {"_id": 0})
     if not exp:
         raise HTTPException(404, "Expense not found")
     if not exp.get("bill_generated"):
         raise HTTPException(400, "Generate the official bill first, then email it")
+    if not has_email(attachments=True):
+        raise HTTPException(503, "Invoice email is not configured. Ask your administrator to set RESEND_API_KEY and a verified SENDER_EMAIL, or use Share/Download.")
     html = build_invoice_html(exp, user, verify_url=body.verify_url, note=body.note)
     subject = f"Invoice {exp.get('bill_id')} — ₹{float(exp.get('total', 0)):.2f}"
     try:
-        email_id = await send_email(body.recipient_email, subject, html, reply_to=user.get("email"))
+        pdf_bytes = build_pdf_bytes(exp, user)
+        filename = re.sub(r"[^a-zA-Z0-9_-]", "_", str(exp.get("bill_id") or "BILL4PE-bill")) + ".pdf"
+        reply_to = user.get("email")
+        if reply_to and reply_to.endswith("@phone.bill4pe.local"):
+            reply_to = None
+        email_id = await send_email(body.recipient_email, subject, html, reply_to=reply_to,
+                                    attachments=[{"filename": filename, "content": base64.b64encode(pdf_bytes).decode("ascii")}])
     except Exception as e:
-        raise HTTPException(502, f"Failed to send email: {str(e)[:150]}")
+        logging.getLogger("bill4pe").warning("Invoice email provider failed (%s)", type(e).__name__)
+        raise HTTPException(502, "Invoice email could not be sent. Please try again or contact your administrator.") from None
     await db.expenses.update_one(
         {"id": eid},
         {"$set": {"emailed_to": body.recipient_email, "emailed_at": now_iso()}},

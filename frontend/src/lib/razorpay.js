@@ -18,7 +18,8 @@ export const loadRazorpay = () =>
 export const openRazorpay = async (order, opts = {}) => {
   const ok = await loadRazorpay();
   if (!ok) throw new Error('Razorpay SDK failed to load. Check your connection.');
-  if (!order || !order.key_id) throw new Error('Payment could not start — API key missing. Please try again.');
+  if (!order || !order.key_id || !order.order_id) throw new Error('Online payment could not start. Please contact support or use wallet.');
+  if (Number(order.amount) < 100) throw new Error('Minimum online payment is ₹1.');
   const { user, name = 'BILL4PE', description = 'Payment', onSuccess, onDismiss } = opts;
 
   return new Promise((resolve, reject) => {
@@ -46,7 +47,10 @@ export const openRazorpay = async (order, opts = {}) => {
         },
       },
     });
-    rzp.on('payment.failed', (r) => reject(new Error(r?.error?.description || 'Payment failed')));
-    rzp.open();
+    rzp.on('payment.failed', (r) => {
+      const description = r?.error?.description;
+      reject(new Error(typeof description === 'string' && description !== 'undefined' ? description : 'Payment could not be completed. Please try again.'));
+    });
+    try { rzp.open(); } catch { reject(new Error('Online payment could not start. Please try again.')); }
   });
 };

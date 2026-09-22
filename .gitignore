@@ -91,3 +91,50 @@ credentials.json
 
 # Sensitive runtime payment receipt uploads (legacy only; new proofs are MongoDB-backed)
 backend/private_uploads/
+
+# Dependencies
+node_modules/
+venv/
+.venv/
+
+# Environment files
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+
+# Builds and caches
+build/
+dist/
+coverage/
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+.gradle/
+local.properties
+
+# Logs and editor files
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
+# Runtime uploads
+backend/uploads/
+backend/private_uploads/
+
+# Archives
+*.zip
+*.tar.gz

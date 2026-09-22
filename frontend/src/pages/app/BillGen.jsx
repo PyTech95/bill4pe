@@ -5,12 +5,12 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Share2, CheckCircle2, FileText, Loader2, Wallet, Sparkles, MessageCircle, Mail, CreditCard } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2, Wallet, Sparkles, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
-import api, { API } from '@/lib/api';
+import api from '@/lib/api';
+import BillActions from '@/components/BillActions';
 import { openRazorpay } from '@/lib/razorpay';
 import { useAuth } from '@/lib/auth';
-import { publicWebUrl } from '@/lib/urls';
 
 export default function BillGen() {
   const { id } = useParams();
@@ -19,9 +19,6 @@ export default function BillGen() {
   const [expense, setExpense] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [open, setOpen] = useState(false);
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [clientEmail, setClientEmail] = useState('');
-  const [sending, setSending] = useState(false);
   const [rzpEnabled, setRzpEnabled] = useState(false);
   const [feeMethod, setFeeMethod] = useState('wallet'); // 'wallet' | 'razorpay'
   const [feePercent, setFeePercent] = useState(1);
@@ -33,20 +30,6 @@ export default function BillGen() {
       if (data?.percent != null) setFeePercent(Number(data.percent));
     }).catch(() => {});
   }, []);
-
-  const sendInvoiceEmail = async () => {
-    if (!clientEmail.trim()) { toast.error('Enter client email'); return; }
-    setSending(true);
-    try {
-      const verify_url = publicWebUrl(`/verify/${expense.bill_id}`);
-      await api.post(`/bills/${id}/email`, { recipient_email: clientEmail.trim(), verify_url });
-      toast.success(`Invoice emailed to ${clientEmail.trim()}`);
-      setEmailOpen(false);
-      setClientEmail('');
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Could not send email');
-    } finally { setSending(false); }
-  };
 
   const load = async () => {
     try {
@@ -124,7 +107,10 @@ export default function BillGen() {
             razorpay_signature: resp.razorpay_signature,
           });
         },
-        onDismiss: () => setGenerating(false),
+        onDismiss: () => {
+          setGenerating(false);
+          toast.info('Payment cancelled. Your bill is still pending.');
+        },
       });
     } catch (err) {
       setGenerating(false);
@@ -137,35 +123,6 @@ export default function BillGen() {
   const handlePayAndGenerate = async () => {
     if (feeMethod === 'razorpay') await payFeeViaRazorpay();
     else await payFromWallet();
-  };
-
-  const pdfUrl = () => {
-    const token = localStorage.getItem('bill4pe_token');
-    return `${API}/bills/${id}/pdf?token=${encodeURIComponent(token || '')}`;
-  };
-
-  const share = async () => {
-    const url = pdfUrl();
-    if (navigator.share) {
-      try { await navigator.share({ title: `BILL4PE Self Invoice ${expense?.bill_id || ''}`, url }); }
-      catch { /* user cancelled */ }
-    } else {
-      navigator.clipboard?.writeText(url);
-      toast.success('Invoice link copied');
-    }
-  };
-
-  const shareWhatsApp = () => {
-    const url = pdfUrl();
-    const msg = `BILL4PE Invoice ${expense?.bill_id || ''}\nAmount: ₹${Number(expense?.total || 0).toFixed(2)}\nMerchant: ${pay.merchant_name || '—'}\n\nView / Download: ${url}\n\n— Sent via BILL4PE · An Intelligent Billing`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
-  };
-
-  const shareEmail = () => {
-    const url = pdfUrl();
-    const subject = `BILL4PE Self Invoice ${expense?.bill_id || ''} — ₹${Number(expense?.total || 0).toFixed(2)}`;
-    const body = `Hi,\n\nPlease find my expense invoice attached.\n\nBill ID: ${expense?.bill_id || ''}\nMerchant: ${pay.merchant_name || '—'}\nAmount: ₹${Number(expense?.total || 0).toFixed(2)}\nTransaction ID: ${pay.transaction_id || '—'}\n\nDownload / verify: ${url}\n\nThanks,\n${user?.name || ''}\n\n— Sent via BILL4PE · bill4pe.com`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   if (!expense) return <div className="py-10 text-center text-slate-400">Loading...</div>;
@@ -378,71 +335,7 @@ export default function BillGen() {
             <div className="text-[10px] uppercase tracking-wider text-white/70 font-bold">Bill ID</div>
             <div className="font-mono font-bold text-white text-lg" data-testid="bill-id">{expense.bill_id}</div>
           </div>
-          <a
-            href={pdfUrl()} target="_blank" rel="noopener noreferrer"
-            className="press-down w-full h-12 bg-navy text-white hover:bg-[#152042] rounded-full font-semibold flex items-center justify-center gap-2"
-            data-testid="download-pdf-btn"
-          >
-            <Download className="w-4 h-4" /> View / Download PDF
-          </a>
-          <button
-            onClick={share}
-            className="press-down w-full h-12 border-2 border-navy text-navy rounded-full font-semibold flex items-center justify-center gap-2"
-            data-testid="share-bill-btn"
-          >
-            <Share2 className="w-4 h-4" /> Share
-          </button>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={shareWhatsApp}
-              className="press-down h-12 rounded-full font-semibold flex items-center justify-center gap-2 bg-[#25D366] text-white hover:brightness-95"
-              data-testid="share-whatsapp-btn"
-            >
-              <MessageCircle className="w-4 h-4" /> WhatsApp
-            </button>
-            <button
-              onClick={shareEmail}
-              className="press-down h-12 rounded-full font-semibold flex items-center justify-center gap-2 bg-white border-2 border-navy text-navy"
-              data-testid="share-email-btn"
-            >
-              <Mail className="w-4 h-4" /> Email
-            </button>
-          </div>
-          <Sheet open={emailOpen} onOpenChange={setEmailOpen}>
-            <SheetTrigger asChild>
-              <button
-                data-testid="email-invoice-btn"
-                className="press-down w-full h-12 rounded-full font-semibold flex items-center justify-center gap-2 bg-brand text-white hover:bg-[#1858CC]"
-              >
-                <Mail className="w-4 h-4" /> Email invoice to client
-              </button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-3xl border-0 px-5 pb-8 pt-7">
-              <SheetHeader className="text-left">
-                <SheetTitle className="font-display text-2xl text-navy">Email invoice</SheetTitle>
-                <SheetDescription className="text-slate-500">
-                  Send invoice {expense.bill_id} to your client's email — includes a secure verify link.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-5">
-                <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Client email</label>
-                <Input
-                  type="email" value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="client@company.com"
-                  className="mt-1 h-12 rounded-xl border-soft"
-                  data-testid="client-email-input"
-                />
-              </div>
-              <Button
-                onClick={sendInvoiceEmail} disabled={sending}
-                className="press-down w-full h-12 mt-5 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
-                data-testid="send-invoice-email-btn"
-              >
-                {sending ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>) : 'Send invoice'}
-              </Button>
-            </SheetContent>
-          </Sheet>
+          <BillActions key={expense.id || id} expense={{ ...expense, id: expense.id || id }} />
           <button
             onClick={() => nav('/app/dashboard')}
             className="w-full h-12 text-slate-500 underline text-sm"

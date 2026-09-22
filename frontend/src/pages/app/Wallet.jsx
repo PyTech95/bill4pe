@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight, Plus, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription,
 } from '@/components/ui/sheet';
@@ -17,8 +17,9 @@ export default function Wallet() {
   const [data, setData] = useState({ balance: 0, transactions: [] });
   const [payments, setPayments] = useState([]);
   const [open, setOpen] = useState(false);
-  const [amt, setAmt] = useState(200);
+  const [amt, setAmt] = useState('');
   const [loading, setLoading] = useState(false);
+  const [welcomeBonus, setWelcomeBonus] = useState(50);
 
   const isEmployee = user?.role === 'employee';
 
@@ -30,11 +31,16 @@ export default function Wallet() {
     setData(w);
     setPayments(p.payments || []);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get('/auth/public-settings')
+      .then(({ data: s }) => setWelcomeBonus(Math.max(0, Number(s?.welcome_bonus ?? 50))))
+      .catch(() => {});
+  }, []);
 
   const recharge = async () => {
     const a = Number(amt);
-    if (!a || a <= 0) { toast.error('Enter a valid amount'); return; }
+    if (!a || a < 1) { toast.error('Minimum recharge amount is ₹1'); return; }
     setLoading(true);
     try {
       const { data: order } = await api.post('/payments/razorpay/order', { amount: a, purpose: 'wallet_recharge' });
@@ -56,7 +62,9 @@ export default function Wallet() {
         },
       });
     } catch (err) {
-      if (err?.message !== 'CHECKOUT_DISMISSED') {
+      if (err?.message === 'CHECKOUT_DISMISSED') {
+        toast.info('Payment cancelled. No amount was deducted.');
+      } else {
         toast.error(err?.response?.data?.detail || err?.message || 'Recharge failed');
       }
     } finally { setLoading(false); }
@@ -79,7 +87,7 @@ export default function Wallet() {
           <div className="text-[11px] text-white/60 mt-1.5 leading-snug">
             {isEmployee
               ? 'Your bills are billed to the company wallet — your admin handles top-ups. Reach out to them if needed.'
-              : 'Prepaid pool for Bill Generation Charges (@ 1% of billed amount). Wallet payments are approved with your 4-digit Wallet PIN. New users get ₹50 free credit.'}
+              : `Prepaid pool for Bill Generation Charges. Wallet payments are approved with your 4-digit Wallet PIN. New users get ₹${welcomeBonus.toLocaleString('en-IN')} welcome credit.`}
           </div>
           {!isEmployee && (
           <Sheet open={open} onOpenChange={setOpen}>
@@ -110,7 +118,7 @@ export default function Wallet() {
               </div>
               <div className="mt-4">
                 <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Or enter amount</label>
-                <Input
+                <AmountInput
                   type="number" min="1" max="10000" value={amt}
                   onChange={(e) => setAmt(e.target.value)}
                   className="mt-1 h-12 rounded-xl border-soft font-mono"

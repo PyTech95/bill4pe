@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -51,15 +52,23 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [feeForm, setFeeForm] = useState({ individual: '', corporate: '' });
   const [savingFees, setSavingFees] = useState(false);
+  const [runtime, setRuntime] = useState({
+    otp_mode: 'development', otp_provider: 'msg91', otp_api_key: '',
+    otp_expiry_minutes: 5, otp_resend_seconds: 60, otp_max_requests: 5,
+    otp_lock_minutes: 15, welcome_bonus: 50,
+  });
+  const [savingRuntime, setSavingRuntime] = useState(false);
+  const [savingBonus, setSavingBonus] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [s, u, c, f] = await Promise.all([
+      const [s, u, c, f, r] = await Promise.all([
         api.get('/superadmin/stats'),
         api.get('/superadmin/users', { params: { limit: 200 } }),
         api.get('/superadmin/companies'),
         api.get('/superadmin/bill-fees'),
+        api.get('/superadmin/runtime-settings'),
       ]);
       setStats(s.data);
       setUsers(u.data.users || []);
@@ -68,6 +77,7 @@ export default function SuperAdminDashboard() {
         individual: String(f.data?.individual ?? 1),
         corporate: String(f.data?.corporate ?? 1),
       });
+      setRuntime((old) => ({ ...old, ...r.data, otp_api_key: '' }));
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to load admin data');
       if (err?.response?.status === 403) nav('/superadmin/login', { replace: true });
@@ -116,6 +126,45 @@ export default function SuperAdminDashboard() {
       toast.success('User updated');
       loadAll();
     } catch (e) { toast.error(e?.response?.data?.detail || 'Failed'); }
+  };
+  const handleCreditUser = async (u) => {
+    const raw = window.prompt(`Credit ${u.name || u.email || u.phone} wallet by amount (₹):`, '20');
+    if (!raw) return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) return toast.error('Enter a valid positive amount');
+    try {
+      const { data } = await api.post(`/superadmin/users/${u.id}/wallet/credit`, { amount });
+      toast.success(`Wallet credited. New balance: ${fmtMoney(data.balance)}`);
+      loadAll();
+    } catch (e) { toast.error(e?.response?.data?.detail || 'Wallet credit failed'); }
+  };
+  const saveOtpSettings = async () => {
+    setSavingRuntime(true);
+    try {
+      const payload = {
+        otp_mode: runtime.otp_mode, otp_provider: runtime.otp_provider,
+        otp_api_key: runtime.otp_api_key,
+        otp_expiry_minutes: runtime.otp_expiry_minutes,
+        otp_resend_seconds: runtime.otp_resend_seconds,
+        otp_max_requests: runtime.otp_max_requests,
+        otp_lock_minutes: runtime.otp_lock_minutes,
+      };
+      const { data } = await api.put('/superadmin/runtime-settings', payload);
+      setRuntime((old) => ({ ...old, ...data, otp_api_key: '' }));
+      toast.success('Phone OTP settings updated');
+    } catch (e) { toast.error(e?.response?.data?.detail || 'Settings update failed'); }
+    finally { setSavingRuntime(false); }
+  };
+  const saveWelcomeBonus = async () => {
+    const amount = Number(runtime.welcome_bonus);
+    if (!Number.isFinite(amount) || amount < 0) return toast.error('Enter a valid welcome bonus');
+    setSavingBonus(true);
+    try {
+      const { data } = await api.put('/superadmin/runtime-settings', { welcome_bonus: amount });
+      setRuntime((old) => ({ ...old, welcome_bonus: data.welcome_bonus }));
+      toast.success(`Welcome bonus updated to ${fmtMoney(data.welcome_bonus)}`);
+    } catch (e) { toast.error(e?.response?.data?.detail || 'Welcome bonus update failed'); }
+    finally { setSavingBonus(false); }
   };
   const handleDelete = async (u) => {
     if (!window.confirm(`Delete user ${u.email || u.phone}? This cannot be undone.`)) return;
@@ -281,6 +330,15 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-1">
                             <button
+                              onClick={() => handleCreditUser(u)}
+                              className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-600 disabled:opacity-30"
+                              disabled={u.is_super_admin}
+                              title="Credit wallet"
+                              data-testid={`user-credit-${u.id}`}
+                            >
+                              <WalletIcon className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleToggle(u)}
                               className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30"
                               disabled={u.is_super_admin}
@@ -372,7 +430,47 @@ export default function SuperAdminDashboard() {
         )}
 
         {tab === 'settings' && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl space-y-5">
+            <div className="rounded-2xl bg-white border border-slate-200 p-6" data-testid="welcome-bonus-settings-card">
+              <div className="font-display font-bold text-navy text-lg">Welcome wallet bonus</div>
+              <p className="text-xs text-slate-500 mt-1">This amount is credited to every newly registered user and shown on the signup screen.</p>
+              <div className="mt-5 max-w-sm">
+                <label className="text-xs font-semibold text-slate-600">Bonus amount (₹)</label>
+                <AmountInput value={runtime.welcome_bonus} aria-label="Welcome bonus in rupees"
+                  onChange={(e) => setRuntime({ ...runtime, welcome_bonus: e.target.value })}
+                  className="mt-1 h-12 rounded-xl font-mono text-lg" data-testid="welcome-bonus-input" />
+              </div>
+              <Button onClick={saveWelcomeBonus} disabled={savingBonus} className="mt-5 h-12 px-6 rounded-full bg-brand text-white">
+                <Save className="w-4 h-4 mr-2" />{savingBonus ? 'Saving...' : 'Save welcome bonus'}
+              </Button>
+            </div>
+            <div className="rounded-2xl bg-white border border-slate-200 p-6" data-testid="otp-runtime-settings-card">
+              <div className="font-display font-bold text-navy text-lg">Phone OTP settings</div>
+              <div className="mt-5 grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 p-4">
+                  <div>
+                    <div className="text-sm font-semibold text-navy">Production mode</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{runtime.otp_mode === 'production' ? 'Real OTP delivery enabled' : 'Development mode enabled'}</div>
+                  </div>
+                  <button type="button" role="switch" aria-checked={runtime.otp_mode === 'production'}
+                    onClick={() => setRuntime({ ...runtime, otp_mode: runtime.otp_mode === 'production' ? 'development' : 'production' })}
+                    className={`relative h-8 w-14 rounded-full transition-colors ${runtime.otp_mode === 'production' ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                    data-testid="otp-production-toggle">
+                    <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all ${runtime.otp_mode === 'production' ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                {runtime.otp_mode === 'production' && (
+                  <div className="sm:col-span-2"><label className="text-xs font-semibold text-slate-600">API key {runtime.otp_api_key_configured && '(saved)'}</label><Input type="password" value={runtime.otp_api_key} onChange={(e) => setRuntime({ ...runtime, otp_api_key: e.target.value })} placeholder={runtime.otp_api_key_configured ? 'Leave blank to keep saved key' : 'Enter production API key'} className="mt-1 h-12 rounded-xl" autoComplete="new-password" /></div>
+                )}
+                <div><label className="text-xs font-semibold text-slate-600">Resend timer (seconds)</label><Input type="number" min="10" value={runtime.otp_resend_seconds} onChange={(e) => setRuntime({ ...runtime, otp_resend_seconds: e.target.value })} className="mt-1 h-12 rounded-xl" /></div>
+                <div><label className="text-xs font-semibold text-slate-600">OTP expiry (minutes)</label><Input type="number" min="1" value={runtime.otp_expiry_minutes} onChange={(e) => setRuntime({ ...runtime, otp_expiry_minutes: e.target.value })} className="mt-1 h-12 rounded-xl" /></div>
+                <div><label className="text-xs font-semibold text-slate-600">Maximum requests</label><Input type="number" min="1" value={runtime.otp_max_requests} onChange={(e) => setRuntime({ ...runtime, otp_max_requests: e.target.value })} className="mt-1 h-12 rounded-xl" /></div>
+                <div><label className="text-xs font-semibold text-slate-600">Block duration (minutes)</label><Input type="number" min="1" value={runtime.otp_lock_minutes} onChange={(e) => setRuntime({ ...runtime, otp_lock_minutes: e.target.value })} className="mt-1 h-12 rounded-xl" /></div>
+              </div>
+              <Button onClick={saveOtpSettings} disabled={savingRuntime} className="mt-5 h-12 px-6 rounded-full bg-navy text-white">
+                <Save className="w-4 h-4 mr-2" />{savingRuntime ? 'Saving...' : 'Save OTP settings'}
+              </Button>
+            </div>
             <div className="rounded-2xl bg-white border border-slate-200 p-6" data-testid="bill-fee-settings-card">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand text-white grid place-items-center">

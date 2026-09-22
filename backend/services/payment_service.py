@@ -82,8 +82,8 @@ async def create_payment_order(user, purpose, amount=None, expense_draft=None, b
     if expense_draft:
         items = expense_draft.get("items", []) or []
         amount = round(sum(float(i.get("quantity", 1) or 0) * float(i.get("unit_price", 0) or 0) for i in items), 2)
-    if not amount or float(amount) <= 0:
-        raise ValueError("Amount must be positive")
+    if not amount or float(amount) < 1:
+        raise ValueError("Minimum online payment amount is ₹1")
     amount = round(float(amount), 2)
     if purpose == "wallet_recharge" and amount > 10000:
         raise ValueError("Max recharge per txn is ₹10,000")

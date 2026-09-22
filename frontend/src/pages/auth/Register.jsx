@@ -27,6 +27,13 @@ export default function Register() {
   const [employeeTier, setEmployeeTier] = useState(50);
   const [loading, setLoading] = useState(false);
   const [refMeta, setRefMeta] = useState(null);
+  const [welcomeBonus, setWelcomeBonus] = useState(50);
+
+  useEffect(() => {
+    api.get('/auth/public-settings')
+      .then(({ data }) => setWelcomeBonus(Math.max(0, Number(data?.welcome_bonus ?? 50))))
+      .catch(() => setWelcomeBonus(50));
+  }, []);
 
   useEffect(() => {
     if (!refCode) return;
@@ -61,7 +68,7 @@ export default function Register() {
       const user = await register(
         form.email, form.password, form.name, refMeta ? refCode : null, extra
       );
-      const credit = (user?.wallet_balance ?? 50);
+      const credit = Number(user?.wallet_balance ?? welcomeBonus);
       toast.success(
         userType === 'corporate'
           ? `Welcome, ${form.corporate_name}! Free 14-day trial started. ₹${credit.toFixed(0)} added.`
@@ -82,7 +89,7 @@ export default function Register() {
         <div>
           <div className="font-display text-5xl font-bold leading-tight">Start in 30 seconds.</div>
           <p className="text-white/60 mt-4 max-w-sm">
-            Individuals get ₹50 welcome credit. Companies get 14-day trial across 50–100 employees.
+            Individuals get ₹{welcomeBonus.toLocaleString('en-IN')} welcome credit. Companies get a 14-day trial and the configured welcome credit.
           </p>
         </div>
         <div className="text-xs text-white/40">© 2026 BILL4PE · www.bill4pe.com</div>
@@ -274,7 +281,7 @@ export default function Register() {
                 ? 'Creating account...'
                 : userType === 'corporate'
                   ? 'Start 14-day Corporate trial'
-                  : 'Create account & get ₹50'}
+                  : `Create account & get ₹${welcomeBonus.toLocaleString('en-IN')}`}
             </Button>
           </div>
 

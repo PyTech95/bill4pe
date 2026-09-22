@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from core.config import DEMO_OTP, logger
+from core.config import logger
 from core.db import db
 from core.models import (
     RegisterReq, LoginReq, ProfileUpdate, PasswordChange,
@@ -16,6 +16,18 @@ from core.security import (
 from services.referrals import apply_referral, ensure_referral_code
 
 router = APIRouter(tags=["auth"])
+
+
+@router.get("/auth/public-settings")
+async def public_auth_settings():
+    """Non-secret values required before login (signup copy and OTP UX)."""
+    from services.app_settings import get_runtime_settings
+    settings = await get_runtime_settings()
+    return {
+        "welcome_bonus": max(0, float(settings.get("welcome_bonus", 50))),
+        "otp_mode": settings.get("otp_mode", "development"),
+        "otp_resend_seconds": int(settings.get("otp_resend_seconds", 60)),
+    }
 
 
 @router.post("/auth/register")
@@ -42,12 +54,14 @@ async def register(body: RegisterReq):
             "created_at": now_iso(),
         })
 
+    from services.app_settings import get_runtime_settings
+    welcome_bonus = max(0, float((await get_runtime_settings()).get("welcome_bonus", 50)))
     doc = {
         "id": uid,
         "email": body.email.lower(),
         "name": body.name,
         "password": hash_pw(body.password),
-        "wallet_balance": 50.0,  # 50 INR welcome bonus
+        "wallet_balance": welcome_bonus,
         "wallet_pin_set": False,
         "user_type": user_type,
         "role": "admin" if user_type == "corporate" else "individual",
@@ -61,7 +75,7 @@ async def register(body: RegisterReq):
     await db.users.insert_one(doc)
     await db.wallet_txns.insert_one({
         "id": str(uuid.uuid4()), "user_id": uid, "type": "credit",
-        "amount": 50.0, "reason": "Welcome bonus", "created_at": now_iso()
+        "amount": welcome_bonus, "reason": "Welcome bonus", "created_at": now_iso()
     })
     await apply_referral(uid, body.referrer_code)
     await ensure_referral_code(uid)
@@ -154,7 +168,7 @@ async def otp_request(body: OtpRequestReq):
     # stays backwards-compatible for local automated testing only.
     from services.otp import send_otp, is_demo
     existing = await db.users.find_one({"phone": f"+91{phone}"})
-    if not existing and not body.email and not is_demo():
+    if not existing and not body.email and not await is_demo():
         raise HTTPException(400, "Email is required for first-time phone signup")
     if not existing and body.email:
         by_email = await db.users.find_one({"email": str(body.email).lower()})
@@ -172,7 +186,7 @@ async def otp_verify(body: OtpVerifyReq):
     phone = _norm_phone(body.phone)
     if len(phone) != 10:
         raise HTTPException(400, "Invalid phone number")
-    if len((body.otp or "").strip()) != 6 or not (body.otp or "").strip().isdigit():
+    if len((body.otp or "").strip()) != 4 or not (body.otp or "").strip().isdigit():
         raise HTTPException(401, "Invalid OTP")
 
     from services.otp import verify_otp, is_demo
@@ -186,12 +200,14 @@ async def otp_verify(body: OtpVerifyReq):
     user = await db.users.find_one({"phone": f"+91{phone}"})
     is_new = user is None
     if is_new:
-        if not body.email and not is_demo():
+        if not body.email and not await is_demo():
             raise HTTPException(400, "Email is required for first-time phone signup")
         email = str(body.email).lower() if body.email else f"dev-{phone}@phone.bill4pe.local"
         if await db.users.find_one({"email": email}):
             raise HTTPException(400, "Email already registered")
         uid = str(uuid.uuid4())
+        from services.app_settings import get_runtime_settings
+        welcome_bonus = max(0, float((await get_runtime_settings()).get("welcome_bonus", 50)))
         user_doc = {
             "id": uid,
             "email": email,
@@ -199,7 +215,7 @@ async def otp_verify(body: OtpVerifyReq):
             "phone_verified": True,
             "name": (body.name or f"User {phone[-4:]}").strip(),
             "password": hash_pw(str(uuid.uuid4())),
-            "wallet_balance": 50.0,
+            "wallet_balance": welcome_bonus,
             "wallet_pin_set": False,
             "auth_provider": "phone",
             "user_type": "individual",
@@ -210,7 +226,7 @@ async def otp_verify(body: OtpVerifyReq):
         await db.users.insert_one(user_doc)
         await db.wallet_txns.insert_one({
             "id": str(uuid.uuid4()), "user_id": uid, "type": "credit",
-            "amount": 50.0, "reason": "Welcome bonus", "created_at": now_iso()
+            "amount": welcome_bonus, "reason": "Welcome bonus", "created_at": now_iso()
         })
         await apply_referral(uid, body.referrer_code)
         await ensure_referral_code(uid)

@@ -158,6 +158,11 @@ async def first_scan(user, payee_upi, payee_name=None, merchant_amount=None, exp
     merchant_amount_paise = int(round(float(merchant_amount) * 100))
     fee_percent = await _fee_percent_for_user(user)
     b = compute_fee_breakdown(merchant_amount_paise, fee_percent)
+    # Razorpay does not accept sub-rupee checkout orders reliably. Keep the
+    # Super-Admin-configured percentage, with ₹1 minimum for any non-zero rate.
+    if float(fee_percent) > 0 and b["platform_fee_paise"] < 100:
+        b["platform_fee_paise"] = 100
+        b["customer_total_paise"] = merchant_amount_paise + 100
 
     # Never abandon a payment that has already been verified. If the browser
     # lost local state, recover the protected transaction instead of creating a
@@ -773,6 +778,7 @@ async def create_fee_order(user, tid):
     fee_paise = int(txn.get("platform_fee_paise") or 0)
     if fee_paise <= 0:
         raise ValueError("No fee due")
+    fee_paise = max(100, fee_paise)
     session_id = f"FEE-{tid}"
     order = razorpay_service.create_order(
         fee_paise, receipt=f"fee_{tid[:20]}",

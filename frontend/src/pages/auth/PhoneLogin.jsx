@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Phone, Smartphone, Loader2, ArrowLeft, Gift } from 'lucide-react';
+import { Phone, Loader2, ArrowLeft, Gift } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
@@ -16,8 +16,8 @@ export default function PhoneLogin() {
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [demoHint, setDemoHint] = useState('');
   const [otp, setOtp] = useState('');
+  const [otpLength, setOtpLength] = useState(4);
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [refMeta, setRefMeta] = useState(null);
@@ -41,17 +41,22 @@ export default function PhoneLogin() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/otp/request', { phone: digits, name, email: email.trim() || null });
-      setDemoHint(data?.demo_hint || '');
-      toast.success(data?.mode === 'demo' && data?.demo_hint ? data.demo_hint : 'OTP sent successfully');
+      setOtpLength(Number(data?.otp_length) || 4);
+      setOtp('');
+      if (data?.mode === 'development' && data?.development_otp) {
+        toast.success(`Development OTP: ${data.development_otp}`, { duration: 12000 });
+      } else {
+        toast.success('OTP sent successfully');
+      }
       setStep('otp');
-      setResendIn(30);
+      setResendIn(Number(data?.resend_seconds) || 60);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Could not send OTP');
     } finally { setLoading(false); }
   };
 
   const verifyOtp = async () => {
-    if (otp.length !== 6) { toast.error('Enter the 6-digit OTP'); return; }
+    if (otp.length !== otpLength) { toast.error(`Enter the ${otpLength}-digit OTP`); return; }
     setLoading(true);
     try {
       const digits = phone.replace(/\D/g, '').slice(-10);
@@ -97,7 +102,7 @@ export default function PhoneLogin() {
           {step === 'phone' && (
             <>
               <h1 className="font-display font-bold text-3xl">Phone login</h1>
-              <p className="text-sm text-slate-500 mt-1">We'll send a 6-digit OTP to verify.</p>
+              <p className="text-sm text-slate-500 mt-1">We'll send a secure OTP to verify your phone.</p>
 
               {refMeta && (
                 <div className="mt-4 flex items-start gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-3" data-testid="referral-banner">
@@ -137,7 +142,7 @@ export default function PhoneLogin() {
                 <div>
                   <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Mobile number</label>
                   <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-slate-500">+91</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm font-bold text-black">+91</span>
                     <Input
                       type="tel" maxLength={10}
                       placeholder="98765 43210"
@@ -172,16 +177,10 @@ export default function PhoneLogin() {
               <p className="text-sm text-slate-500 mt-1">
                 Sent to <span className="font-mono text-navy font-semibold">+91 {phone}</span>
               </p>
-              {demoHint && (
-                <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider bg-lime/30 text-navy px-2 py-1 rounded-full font-bold">
-                  <Smartphone className="w-3 h-3" /> {demoHint}
-                </div>
-              )}
-
               <div className="mt-8 flex justify-center">
-                <InputOTP maxLength={6} value={otp} onChange={setOtp} data-testid="otp-input">
+                <InputOTP maxLength={otpLength} value={otp} onChange={setOtp} data-testid="otp-input">
                   <InputOTPGroup>
-                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                    {Array.from({ length: otpLength }, (_, i) => i).map((i) => (
                       <InputOTPSlot key={i} index={i} className="h-12 w-12 text-lg font-mono" />
                     ))}
                   </InputOTPGroup>
@@ -189,7 +188,7 @@ export default function PhoneLogin() {
               </div>
 
               <Button
-                onClick={verifyOtp} disabled={loading || otp.length !== 6}
+                onClick={verifyOtp} disabled={loading || otp.length !== otpLength}
                 className="press-down w-full h-12 mt-7 bg-brand text-white hover:bg-[#1858CC] rounded-full font-semibold"
                 data-testid="otp-verify-btn"
               >

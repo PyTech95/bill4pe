@@ -99,6 +99,47 @@ async def update_bill_fees(body: BillFeeUpdate, _=Depends(require_super_admin)):
     return updated
 
 
+# ---------- Runtime OTP / registration settings ----------
+
+class RuntimeSettingsUpdate(BaseModel):
+    otp_mode: Optional[str] = None
+    otp_provider: Optional[str] = None
+    otp_api_key: Optional[str] = None
+    otp_expiry_minutes: Optional[int] = None
+    otp_resend_seconds: Optional[int] = None
+    otp_max_requests: Optional[int] = None
+    otp_lock_minutes: Optional[int] = None
+    welcome_bonus: Optional[float] = None
+
+
+@router.get("/runtime-settings")
+async def get_runtime_settings_admin(_=Depends(require_super_admin)):
+    from services.app_settings import get_runtime_settings, public_settings
+    return public_settings(await get_runtime_settings())
+
+
+@router.put("/runtime-settings")
+async def update_runtime_settings_admin(body: RuntimeSettingsUpdate, _=Depends(require_super_admin)):
+    from services.app_settings import update_runtime_settings, public_settings
+    patch = body.model_dump(exclude_unset=True)
+    if patch.get("otp_mode") not in (None, "development", "production"):
+        raise HTTPException(400, "OTP mode must be development or production")
+    for key, lo, hi in (
+        ("otp_expiry_minutes", 1, 30), ("otp_resend_seconds", 10, 3600),
+        ("otp_max_requests", 1, 20), ("otp_lock_minutes", 1, 1440),
+    ):
+        if key in patch and not lo <= int(patch[key]) <= hi:
+            raise HTTPException(400, f"{key} must be between {lo} and {hi}")
+    if "welcome_bonus" in patch and not 0 <= float(patch["welcome_bonus"]) <= 100000:
+        raise HTTPException(400, "Welcome bonus must be between ₹0 and ₹1,00,000")
+    # Blank secret fields mean "keep the currently saved value".
+    for key in ("otp_api_key",):
+        if key in patch and not str(patch[key] or "").strip():
+            patch.pop(key)
+    updated = await update_runtime_settings(patch)
+    return public_settings(updated)
+
+
 # ---------- Users ----------
 
 @router.get("/users")

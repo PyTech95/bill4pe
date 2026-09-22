@@ -7,6 +7,7 @@ import {
   UserPlus, Link as LinkIcon, FileText, ArrowUpRight, Hourglass, KeyRound,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -423,9 +424,10 @@ const EmployeeModal = ({ mode, onClose, onCreated }) => {
           </Field>
         </div>
         <Field label="Monthly spend cap (₹)">
-          <Input type="number" min="0" value={form.monthly_cap}
+          <AmountInput value={form.monthly_cap} aria-label="Monthly spend cap in rupees"
             onChange={(e) => setForm({ ...form, monthly_cap: e.target.value })}
             data-testid="emp-form-cap" className="h-11 rounded-xl border-soft" placeholder="Leave blank for unlimited" />
+          <p className="mt-1 text-xs text-slate-500">Leave blank for unlimited.</p>
         </Field>
 
         <Button
@@ -763,7 +765,7 @@ const ExpenseDetailModal = ({ e, onClose }) => {
 
 /* --------- Wallet --------- */
 const CompanyWallet = ({ balance, onChange }) => {
-  const [amount, setAmount] = useState('500');
+  const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [txns, setTxns] = useState([]);
 
@@ -777,13 +779,14 @@ const CompanyWallet = ({ balance, onChange }) => {
 
   const recharge = async () => {
     const v = Number(amount);
-    if (!v || v <= 0) { toast.error('Enter a positive amount'); return; }
+    if (!v || v < 1) { toast.error('Minimum recharge amount is ₹1'); return; }
     setBusy(true);
     try {
       const { data: order } = await api.post('/payments/razorpay/order', { amount: v, purpose: 'company_wallet_recharge' });
       await openRazorpay(order, {
         name: 'BILL4PE Company Wallet',
         description: `Add ₹${v} to company wallet`,
+        onDismiss: () => toast.info('Payment cancelled. No amount was deducted.'),
         onSuccess: async (resp) => {
           await api.post('/payments/razorpay/verify', {
             razorpay_order_id: resp.razorpay_order_id,
@@ -832,7 +835,7 @@ const CompanyWallet = ({ balance, onChange }) => {
           ))}
         </div>
         <div className="flex gap-2 mt-2">
-          <Input
+          <AmountInput
             type="number" min="0" value={amount}
             onChange={(e) => setAmount(e.target.value)}
             data-testid="cw-amount-input"

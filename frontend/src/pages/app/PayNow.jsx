@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2, CheckCircle2, XCircle, ArrowLeft, ReceiptText, Wallet, CreditCard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -300,6 +301,7 @@ export default function PayNow() {
         { order_id: data.razorpay_order_id, amount: data.amount_paise, currency: 'INR', key_id: data.razorpay_key_id },
         {
           name: 'BILL4PE', description: 'Bill Generation Charges',
+          onDismiss: () => toast.info('Payment cancelled. Your bill is still pending.'),
           onSuccess: async (resp) => {
             try {
               const { data: v } = await api.post(`/manual-pay/${txn.transaction_id}/fee-verify`, {
@@ -324,7 +326,9 @@ export default function PayNow() {
           },
         },
       );
-    } catch (e) { toast.error(e.response?.data?.detail || 'Online payment could not start. Check Razorpay configuration or use wallet.'); }
+    } catch (e) {
+      if (e?.message !== 'CHECKOUT_DISMISSED') toast.error(e.response?.data?.detail || e?.message || 'Online payment could not start. Check Razorpay configuration or use wallet.');
+    }
     finally { setBusy(false); }
   };
 
@@ -435,7 +439,7 @@ export default function PayNow() {
           {!draft && (
             <div className="rounded-xl border p-4" data-testid="amount-form">
               <label className="text-sm font-medium">Amount (₹)</label>
-              <Input value={payeeAmount} onChange={(e) => setPayeeAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="0.00" className="font-mono mt-1" data-testid="payee-amount-input" />
+              <AmountInput value={payeeAmount} onChange={(e) => setPayeeAmount(e.target.value)} className="font-mono mt-1" data-testid="payee-amount-input" />
             </div>
           )}
           <Button className="w-full" disabled={busy} onClick={startPayment} data-testid="start-payment-btn">

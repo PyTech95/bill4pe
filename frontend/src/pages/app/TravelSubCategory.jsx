@@ -5,6 +5,7 @@ import {
   StickyNote, Navigation, Crosshair,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { AmountInput } from '@/components/AmountInput';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
@@ -262,7 +263,7 @@ export default function TravelSubCategory() {
           {/* Amount */}
           <div>
             <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Amount (₹)</label>
-            <Input
+            <AmountInput
               type="number" min="0" step="1"
               placeholder="0"
               value={amount}

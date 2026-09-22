@@ -8,6 +8,8 @@
 import asyncio
 import logging
 import os
+from html import escape
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -22,11 +24,14 @@ EMERGENT_EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 
 
-def has_email() -> bool:
+def has_email(*, attachments: bool = False) -> bool:
+    if attachments:
+        return bool(RESEND_API_KEY)
     return bool(RESEND_API_KEY or EMERGENT_EMAIL_KEY)
 
 
-async def send_email(recipient: str, subject: str, html: str, reply_to: str | None = None) -> str | None:
+async def send_email(recipient: str, subject: str, html: str, reply_to: str | None = None,
+                     attachments: list[dict] | None = None) -> str | None:
     # Preferred: your own Resend account (works anywhere)
     if RESEND_API_KEY:
         import resend
@@ -39,8 +44,15 @@ async def send_email(recipient: str, subject: str, html: str, reply_to: str | No
         }
         if reply_to:
             params["reply_to"] = reply_to
+        if attachments:
+            params["attachments"] = attachments
         result = await asyncio.to_thread(resend.Emails.send, params)
         return result.get("id") if isinstance(result, dict) else getattr(result, "id", None)
+
+    # The legacy proxy has no verified attachment contract. Never silently drop
+    # the PDF while reporting a successful invoice email.
+    if attachments:
+        raise RuntimeError("PDF email requires RESEND_API_KEY and a verified SENDER_EMAIL")
 
     # Fallback: Emergent managed proxy
     if EMERGENT_EMAIL_KEY:
@@ -67,16 +79,16 @@ def build_invoice_html(expense: dict, user: dict, verify_url: str | None = None,
     total = float(expense.get("total", 0) or 0)
     fee = float(expense.get("bill_fee") or 0)
     grand = total + fee
-    bill_id = expense.get("bill_id") or expense["id"][:8].upper()
-    user_name = (user or {}).get("name", "Customer")
+    bill_id = escape(str(expense.get("bill_id") or expense["id"][:8].upper()))
+    user_name = escape(str((user or {}).get("name") or "Customer"))
 
     item_rows = ""
     for it in expense.get("items", []):
         amt = float(it.get("quantity", 1)) * float(it.get("unit_price", 0))
         item_rows += (
             f'<tr>'
-            f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0F172A;font-size:14px;">{it.get("name","")}</td>'
-            f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#64748B;font-size:13px;text-align:center;">{it.get("quantity",1):g}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0F172A;font-size:14px;">{escape(str(it.get("name", "")))}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#64748B;font-size:13px;text-align:center;">{float(it.get("quantity",1)):g}</td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#64748B;font-size:13px;text-align:right;">₹{float(it.get("unit_price",0)):.2f}</td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0F172A;font-size:14px;text-align:right;font-weight:600;">₹{amt:.2f}</td>'
             f'</tr>'
@@ -95,14 +107,14 @@ def build_invoice_html(expense: dict, user: dict, verify_url: str | None = None,
     if note:
         note_block = (
             f'<tr><td colspan="4" style="padding:12px;background:#F4F6FA;color:#334155;font-size:13px;line-height:1.6;">'
-            f'{note}</td></tr>'
+            f'{escape(note).replace(chr(10), "<br/>")}</td></tr>'
         )
 
     verify_block = ""
-    if verify_url:
+    if verify_url and urlsplit(verify_url).scheme in ("https", "http"):
         verify_block = (
             f'<div style="text-align:center;margin-top:20px;">'
-            f'<a href="{verify_url}" style="display:inline-block;background:#1F6FEB;color:#FFFFFF;text-decoration:none;'
+            f'<a href="{escape(verify_url, quote=True)}" style="display:inline-block;background:#1F6FEB;color:#FFFFFF;text-decoration:none;'
             f'font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;">Verify &amp; View Invoice</a>'
             f'</div>'
         )
@@ -118,7 +130,7 @@ def build_invoice_html(expense: dict, user: dict, verify_url: str | None = None,
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="color:#64748B;font-size:12px;">Bill ID<br/><b style="color:#0F172A;font-size:15px;">{bill_id}</b></td>
-              <td style="text-align:right;color:#64748B;font-size:12px;">Merchant<br/><b style="color:#0F172A;font-size:15px;">{pay.get("merchant_name") or "—"}</b></td>
+              <td style="text-align:right;color:#64748B;font-size:12px;">Merchant<br/><b style="color:#0F172A;font-size:15px;">{escape(str(pay.get("merchant_name") or "—"))}</b></td>
             </tr>
           </table>
           <p style="color:#334155;font-size:14px;margin:18px 0 6px;">Hi, please find the invoice from <b>{user_name}</b> below.</p>
@@ -137,14 +149,14 @@ def build_invoice_html(expense: dict, user: dict, verify_url: str | None = None,
           </table>
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
             <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Transaction ID</td>
-                <td style="text-align:right;color:#0F172A;font-size:13px;">{pay.get("transaction_id") or "—"}</td></tr>
+                <td style="text-align:right;color:#0F172A;font-size:13px;">{escape(str(pay.get("transaction_id") or "—"))}</td></tr>
             <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Payment Method</td>
-                <td style="text-align:right;color:#0F172A;font-size:13px;">{pay.get("payment_method","UPI")}</td></tr>
+                <td style="text-align:right;color:#0F172A;font-size:13px;">{escape(str(pay.get("payment_method", "UPI")))}</td></tr>
           </table>
           {verify_block}
         </td></tr>
         <tr><td style="padding:14px 24px;background:#F4F6FA;color:#94A3B8;font-size:11px;">
-          System-generated reimbursement invoice via BILL4PE · www.bill4pe.com
+          Bill generated by Bill4Pay Global LLP · BILL4PE · www.bill4pay.com
         </td></tr>
       </table>
     </div>
